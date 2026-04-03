@@ -54,3 +54,32 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Secrets & credentials
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.secret
+credentials.json
+service-account.json
+
+# Docker
+docker-compose.override.yml
+
+# Claude / OMC
+.claude/
+.omc/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Misc
+*.bak
+*.swp
+*.swo
+*~
