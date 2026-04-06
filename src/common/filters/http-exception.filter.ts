@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { ApiErrorResponse } from '../dto/api-response.dto';
+import { ApiErrorResponse } from '../dto/api-response.dto.js';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {

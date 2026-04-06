@@ -1,15 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UserResponseDto {
-  @ApiProperty({ example: 1 })
-  id: number;
+  @ApiProperty({ description: '유저 ID' })
+  id: string;
 
-  @ApiProperty({ example: 'user@example.com' })
+  @ApiProperty({ description: '이메일' })
   email: string;
 
-  @ApiProperty({ example: '홍길동' })
-  nickname: string;
+  @ApiProperty({ description: '이름' })
+  name: string;
 
-  @ApiProperty({ example: '2024-01-01T00:00:00.000Z' })
+  @ApiProperty({ description: '생성일' })
   createdAt: Date;
 }

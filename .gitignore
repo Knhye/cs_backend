@@ -83,3 +83,5 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+/generated/prisma

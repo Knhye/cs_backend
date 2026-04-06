@@ -10,7 +10,7 @@ import {
   getSchemaPath,
   ApiExtraModels,
 } from '@nestjs/swagger';
-import { ApiResponse, ApiErrorResponse } from '../dto/api-response.dto';
+import { ApiResponse, ApiErrorResponse } from '../dto/api-response.dto.js';
 
 /**
  * 공통 응답 형식을 포함한 Swagger 문서 데코레이터
