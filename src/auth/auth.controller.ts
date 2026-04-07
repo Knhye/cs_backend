@@ -2,14 +2,17 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { ApiCommonResponse } from '../common/decorators/api-common-response.decorator.js';
 import {
   CurrentUser,
@@ -20,12 +23,17 @@ import { LoginDto } from './dto/login.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { SignupDto } from './dto/signup.dto.js';
 import { TokenResponseDto } from './dto/token-response.dto.js';
+import { GoogleAuthGuard } from './guards/google-auth.guard.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
+import { GoogleProfile } from './strategies/google.strategy.js';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Post('signup')
   @ApiOperation({ summary: '회원가입' })
@@ -40,6 +48,38 @@ export class AuthController {
   @ApiCommonResponse({ type: TokenResponseDto })
   async login(@Body() dto: LoginDto): Promise<TokenResponseDto> {
     return this.authService.login(dto);
+  }
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google 로그인 시작' })
+  googleAuth(): void {
+    // Guard가 Google OAuth로 리디렉트 처리
+  }
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google 로그인 콜백' })
+  async googleAuthCallback(
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    const profile = req.user as GoogleProfile;
+    const frontendUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
+    const redirectUrl = new URL('/auth/callback', frontendUrl);
+
+    try {
+      const tokens = await this.authService.googleLogin(profile);
+      redirectUrl.searchParams.set('accessToken', tokens.accessToken);
+      redirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
+    } catch (error) {
+      redirectUrl.searchParams.set(
+        'error',
+        error instanceof Error ? error.message : 'google_login_failed',
+      );
+    }
+
+    res.redirect(redirectUrl.toString());
   }
 
   @Post('refresh')

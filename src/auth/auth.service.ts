@@ -11,6 +11,7 @@ import { SignupDto } from './dto/signup.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { TokenResponseDto } from './dto/token-response.dto.js';
 import { TokenBlacklistService } from './token-blacklist.service.js';
+import { GoogleProfile } from './strategies/google.strategy.js';
 
 @Injectable()
 export class AuthService {
@@ -54,12 +55,42 @@ export class AuthService {
       );
     }
 
+    if (!user.password) {
+      throw new UnauthorizedException('소셜 로그인으로 가입된 계정입니다.');
+    }
+
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException(
         '이메일 또는 비밀번호가 올바르지 않습니다.',
       );
+    }
+
+    return this.generateTokens(user.id, user.email, user.name);
+  }
+
+  async googleLogin(profile: GoogleProfile): Promise<TokenResponseDto> {
+    let user = await this.prisma.user.findFirst({
+      where: { provider: 'google', providerId: profile.providerId },
+    });
+
+    if (!user) {
+      const existingByEmail = await this.prisma.user.findUnique({
+        where: { email: profile.email },
+      });
+      if (existingByEmail) {
+        throw new ConflictException('이미 다른 방식으로 가입된 이메일입니다.');
+      }
+
+      user = await this.prisma.user.create({
+        data: {
+          email: profile.email,
+          name: profile.name,
+          provider: 'google',
+          providerId: profile.providerId,
+        },
+      });
     }
 
     return this.generateTokens(user.id, user.email, user.name);

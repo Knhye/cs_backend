@@ -8,14 +8,17 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String
-  createdAt DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  email      String   @unique
+  password   String?
+  name       String
+  provider   String   @default("local")
+  providerId String?  @map("provider_id")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   refreshTokens RefreshToken[]
 
+  @@unique([provider, providerId])
   @@map("users")
 }
 
