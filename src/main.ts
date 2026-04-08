@@ -10,6 +10,12 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  app.enableCors({
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true, // DTO에 없는 프로퍼티 제거
