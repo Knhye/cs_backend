@@ -11,6 +11,7 @@ import { SignupDto } from './dto/signup.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { TokenResponseDto } from './dto/token-response.dto.js';
 import { TokenBlacklistService } from './token-blacklist.service.js';
+import { EmailVerificationService } from './email-verification.service.js';
 import { GoogleProfile } from './strategies/google.strategy.js';
 
 @Injectable()
@@ -20,9 +21,12 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly tokenBlacklistService: TokenBlacklistService,
+    private readonly emailVerificationService: EmailVerificationService,
   ) {}
 
   async signup(dto: SignupDto): Promise<TokenResponseDto> {
+    await this.emailVerificationService.assertVerified(dto.email);
+
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -41,6 +45,8 @@ export class AuthService {
         profileImg: dto.profileImg,
       },
     });
+
+    await this.emailVerificationService.consumeVerified(dto.email);
 
     return this.generateTokens(user.id, user.email, user.name);
   }

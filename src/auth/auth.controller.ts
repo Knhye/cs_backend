@@ -19,9 +19,12 @@ import {
   CurrentUserPayload,
 } from '../common/decorators/current-user.decorator.js';
 import { AuthService } from './auth.service.js';
+import { EmailVerificationService } from './email-verification.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
+import { SendEmailCodeDto } from './dto/send-email-code.dto.js';
 import { SignupDto } from './dto/signup.dto.js';
+import { VerifyEmailCodeDto } from './dto/verify-email-code.dto.js';
 import { TokenResponseDto } from './dto/token-response.dto.js';
 import { GoogleAuthGuard } from './guards/google-auth.guard.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
@@ -33,7 +36,24 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly emailVerificationService: EmailVerificationService,
   ) {}
+
+  @Post('email/send-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '이메일 인증 코드 발송' })
+  @ApiCommonResponse({})
+  async sendEmailCode(@Body() dto: SendEmailCodeDto): Promise<void> {
+    await this.emailVerificationService.sendCode(dto.email);
+  }
+
+  @Post('email/verify-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '이메일 인증 코드 확인' })
+  @ApiCommonResponse({})
+  async verifyEmailCode(@Body() dto: VerifyEmailCodeDto): Promise<void> {
+    await this.emailVerificationService.verifyCode(dto.email, dto.code);
+  }
 
   @Post('signup')
   @ApiOperation({ summary: '회원가입' })

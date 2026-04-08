@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUrl, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MinLength,
+} from 'class-validator';
 
 export class SignupDto {
   @ApiProperty({ example: 'user@example.com', description: '이메일' })
@@ -19,8 +26,8 @@ export class SignupDto {
   name: string;
 
   @ApiProperty({
-    example: 'https://example.com/profile.jpg',
-    description: '프로필 이미지 URL',
+    example: 'https://res.cloudinary.com/.../profile.jpg',
+    description: '프로필 이미지 URL (S3/Cloudinary 업로드 후 URL)',
     required: false,
   })
   @IsOptional()
