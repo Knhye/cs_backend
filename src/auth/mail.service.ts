@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
@@ -42,7 +42,7 @@ export class MailService {
       await this.transporter.sendMail({ from: this.from, to, subject, html });
     } catch (err) {
       this.logger.error(`메일 발송 실패: ${to}`, err as Error);
-      throw err;
+      throw new InternalServerErrorException('서버 오류: 메일 발송을 처리할 수 없습니다.');
     }
   }
 }

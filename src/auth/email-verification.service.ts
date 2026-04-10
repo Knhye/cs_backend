@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  HttpException,
   Inject,
   Injectable,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../common/redis/redis.module.js';
@@ -23,54 +25,76 @@ export class EmailVerificationService {
   ) {}
 
   async sendCode(email: string): Promise<void> {
-    const cooldownKey = `${COOLDOWN_PREFIX}${email}`;
-    const onCooldown = await this.redis.get(cooldownKey);
-    if (onCooldown) {
-      throw new BadRequestException(
-        '잠시 후 다시 요청해 주세요. (1분 쿨다운)',
+    try {
+      const cooldownKey = `${COOLDOWN_PREFIX}${email}`;
+      const onCooldown = await this.redis.get(cooldownKey);
+      if (onCooldown) {
+        throw new BadRequestException(
+          '잠시 후 다시 요청해 주세요. (1분 쿨다운)',
+        );
+      }
+
+      const code = this.generateCode();
+      await this.redis.set(`${CODE_PREFIX}${email}`, code, 'EX', CODE_TTL_SEC);
+      await this.redis.set(cooldownKey, '1', 'EX', COOLDOWN_SEC);
+
+      await this.mailService.sendVerificationCode(email, code);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException(
+        '서버 오류: 인증 코드 발송을 처리할 수 없습니다.',
       );
     }
-
-    const code = this.generateCode();
-    await this.redis.set(
-      `${CODE_PREFIX}${email}`,
-      code,
-      'EX',
-      CODE_TTL_SEC,
-    );
-    await this.redis.set(cooldownKey, '1', 'EX', COOLDOWN_SEC);
-
-    await this.mailService.sendVerificationCode(email, code);
   }
 
   async verifyCode(email: string, code: string): Promise<void> {
-    const key = `${CODE_PREFIX}${email}`;
-    const stored = await this.redis.get(key);
+    try {
+      const key = `${CODE_PREFIX}${email}`;
+      const stored = await this.redis.get(key);
 
-    if (!stored || stored !== code) {
-      throw new BadRequestException(
-        '인증 코드가 올바르지 않거나 만료되었습니다.',
+      if (!stored || stored !== code) {
+        throw new BadRequestException(
+          '인증 코드가 올바르지 않거나 만료되었습니다.',
+        );
+      }
+
+      await this.redis.del(key);
+      await this.redis.set(
+        `${VERIFIED_PREFIX}${email}`,
+        '1',
+        'EX',
+        VERIFIED_TTL_SEC,
+      );
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException(
+        '서버 오류: 인증 코드 확인을 처리할 수 없습니다.',
       );
     }
-
-    await this.redis.del(key);
-    await this.redis.set(
-      `${VERIFIED_PREFIX}${email}`,
-      '1',
-      'EX',
-      VERIFIED_TTL_SEC,
-    );
   }
 
   async assertVerified(email: string): Promise<void> {
-    const ok = await this.redis.get(`${VERIFIED_PREFIX}${email}`);
-    if (!ok) {
-      throw new BadRequestException('이메일 인증이 필요합니다.');
+    try {
+      const ok = await this.redis.get(`${VERIFIED_PREFIX}${email}`);
+      if (!ok) {
+        throw new BadRequestException('이메일 인증이 필요합니다.');
+      }
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException(
+        '서버 오류: 이메일 인증 확인을 처리할 수 없습니다.',
+      );
     }
   }
 
   async consumeVerified(email: string): Promise<void> {
-    await this.redis.del(`${VERIFIED_PREFIX}${email}`);
+    try {
+      await this.redis.del(`${VERIFIED_PREFIX}${email}`);
+    } catch {
+      throw new InternalServerErrorException(
+        '서버 오류: 이메일 인증 정보 정리를 처리할 수 없습니다.',
+      );
+    }
   }
 
   private generateCode(): string {

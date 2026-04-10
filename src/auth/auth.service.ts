@@ -1,6 +1,8 @@
 import {
   ConflictException,
+  HttpException,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -25,121 +27,151 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto): Promise<TokenResponseDto> {
-    await this.emailVerificationService.assertVerified(dto.email);
+    try {
+      await this.emailVerificationService.assertVerified(dto.email);
 
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
+      const existing = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
 
-    if (existing) {
-      throw new ConflictException('이미 사용 중인 이메일입니다.');
+      if (existing) {
+        throw new ConflictException('이미 사용 중인 이메일입니다.');
+      }
+
+      const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+      const user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          password: hashedPassword,
+          name: dto.name,
+          profileImg: dto.profileImg,
+        },
+      });
+
+      await this.emailVerificationService.consumeVerified(dto.email);
+
+      return this.generateTokens(user.id, user.email, user.name);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException('서버 오류: 회원가입을 처리할 수 없습니다.');
     }
-
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        password: hashedPassword,
-        name: dto.name,
-        profileImg: dto.profileImg,
-      },
-    });
-
-    await this.emailVerificationService.consumeVerified(dto.email);
-
-    return this.generateTokens(user.id, user.email, user.name);
   }
 
   async login(dto: LoginDto): Promise<TokenResponseDto> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
 
-    if (!user) {
-      throw new UnauthorizedException(
-        '이메일 또는 비밀번호가 올바르지 않습니다.',
-      );
+      if (!user) {
+        throw new UnauthorizedException(
+          '이메일 또는 비밀번호가 올바르지 않습니다.',
+        );
+      }
+
+      if (!user.password) {
+        throw new UnauthorizedException('소셜 로그인으로 가입된 계정입니다.');
+      }
+
+      const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+
+      if (!isPasswordValid) {
+        throw new UnauthorizedException(
+          '이메일 또는 비밀번호가 올바르지 않습니다.',
+        );
+      }
+
+      return this.generateTokens(user.id, user.email, user.name);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException('서버 오류: 로그인을 처리할 수 없습니다.');
     }
-
-    if (!user.password) {
-      throw new UnauthorizedException('소셜 로그인으로 가입된 계정입니다.');
-    }
-
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException(
-        '이메일 또는 비밀번호가 올바르지 않습니다.',
-      );
-    }
-
-    return this.generateTokens(user.id, user.email, user.name);
   }
 
   async googleLogin(profile: GoogleProfile): Promise<TokenResponseDto> {
-    let user = await this.prisma.user.findFirst({
-      where: { provider: 'google', providerId: profile.providerId },
-    });
-
-    if (!user) {
-      const existingByEmail = await this.prisma.user.findUnique({
-        where: { email: profile.email },
+    try {
+      let user = await this.prisma.user.findFirst({
+        where: { provider: 'google', providerId: profile.providerId },
       });
-      if (existingByEmail) {
-        throw new ConflictException('이미 다른 방식으로 가입된 이메일입니다.');
+
+      if (!user) {
+        const existingByEmail = await this.prisma.user.findUnique({
+          where: { email: profile.email },
+        });
+        if (existingByEmail) {
+          throw new ConflictException('이미 다른 방식으로 가입된 이메일입니다.');
+        }
+
+        user = await this.prisma.user.create({
+          data: {
+            email: profile.email,
+            name: profile.name,
+            provider: 'google',
+            providerId: profile.providerId,
+          },
+        });
       }
 
-      user = await this.prisma.user.create({
-        data: {
-          email: profile.email,
-          name: profile.name,
-          provider: 'google',
-          providerId: profile.providerId,
-        },
-      });
+      return this.generateTokens(user.id, user.email, user.name);
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException('서버 오류: 구글 로그인을 처리할 수 없습니다.');
     }
-
-    return this.generateTokens(user.id, user.email, user.name);
   }
 
   async refresh(refreshToken: string): Promise<TokenResponseDto> {
-    const stored = await this.prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
-      include: { user: true },
-    });
+    try {
+      const stored = await this.prisma.refreshToken.findUnique({
+        where: { token: refreshToken },
+        include: { user: true },
+      });
 
-    if (!stored || stored.expiresAt < new Date()) {
-      if (stored) {
-        await this.prisma.refreshToken.delete({ where: { id: stored.id } });
+      if (!stored || stored.expiresAt < new Date()) {
+        if (stored) {
+          await this.prisma.refreshToken.delete({ where: { id: stored.id } });
+        }
+        throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
       }
-      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
+
+      await this.prisma.refreshToken.delete({ where: { id: stored.id } });
+
+      return this.generateTokens(
+        stored.user.id,
+        stored.user.email,
+        stored.user.name,
+      );
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException('서버 오류: 토큰 갱신을 처리할 수 없습니다.');
     }
-
-    await this.prisma.refreshToken.delete({ where: { id: stored.id } });
-
-    return this.generateTokens(
-      stored.user.id,
-      stored.user.email,
-      stored.user.name,
-    );
   }
 
   async logout(userId: string, accessToken: string): Promise<void> {
-    await this.blacklistAccessToken(accessToken);
+    try {
+      await this.blacklistAccessToken(accessToken);
 
-    await this.prisma.refreshToken.deleteMany({
-      where: { userId },
-    });
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId },
+      });
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException('서버 오류: 로그아웃을 처리할 수 없습니다.');
+    }
   }
 
   async withdraw(userId: string, accessToken: string): Promise<void> {
-    await this.blacklistAccessToken(accessToken);
+    try {
+      await this.blacklistAccessToken(accessToken);
 
-    // Cascade로 RefreshToken도 함께 삭제됨
-    await this.prisma.user.delete({
-      where: { id: userId },
-    });
+      // Cascade로 RefreshToken도 함께 삭제됨
+      await this.prisma.user.delete({
+        where: { id: userId },
+      });
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException('서버 오류: 회원 탈퇴를 처리할 수 없습니다.');
+    }
   }
 
   private async blacklistAccessToken(token: string): Promise<void> {

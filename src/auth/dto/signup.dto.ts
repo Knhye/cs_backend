@@ -12,18 +12,18 @@ export class SignupDto {
   @ApiProperty({ example: 'user@example.com', description: '이메일' })
   @IsEmail({}, { message: '올바른 이메일 형식이 아닙니다.' })
   @IsNotEmpty({ message: '이메일은 필수입니다.' })
-  email: string;
+  email!: string;
 
   @ApiProperty({ example: 'password123', description: '비밀번호 (최소 6자)' })
   @IsString()
   @MinLength(6, { message: '비밀번호는 최소 6자 이상이어야 합니다.' })
   @IsNotEmpty({ message: '비밀번호는 필수입니다.' })
-  password: string;
+  password!: string;
 
   @ApiProperty({ example: '홍길동', description: '이름' })
   @IsString()
   @IsNotEmpty({ message: '이름은 필수입니다.' })
-  name: string;
+  name!: string;
 
   @ApiProperty({
     example: 'https://res.cloudinary.com/.../profile.jpg',

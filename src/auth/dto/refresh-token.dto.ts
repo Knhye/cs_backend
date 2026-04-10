@@ -5,5 +5,5 @@ export class RefreshTokenDto {
   @ApiProperty({ description: '리프레시 토큰' })
   @IsString()
   @IsNotEmpty({ message: '리프레시 토큰은 필수입니다.' })
-  refreshToken: string;
+  refreshToken!: string;
 }
