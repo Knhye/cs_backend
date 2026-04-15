@@ -1,0 +1,68 @@
+import { ApiProperty } from '@nestjs/swagger';
+
+export class SessionStartResponseDto {
+  @ApiProperty({ description: '세션 ID' })
+  sessionId!: string;
+
+  @ApiProperty({ description: '시작 시각', example: '2026-04-11T09:00:00.000Z' })
+  startedAt!: Date;
+}
+
+export class CurrentSessionResponseDto {
+  @ApiProperty({ description: '세션 ID' })
+  sessionId!: string;
+
+  @ApiProperty({ description: '시작 시각' })
+  startedAt!: Date;
+}
+
+export class NewBadgeDto {
+  @ApiProperty({ description: '배지 코드' })
+  code!: string;
+
+  @ApiProperty({ description: '배지 이름' })
+  name!: string;
+}
+
+export class SessionEndResponseDto {
+  @ApiProperty({ description: '세션 ID' })
+  sessionId!: string;
+
+  @ApiProperty({ description: '총 사용 시간(초)' })
+  totalDurationSec!: number;
+
+  @ApiProperty({ description: '정자세 지속 시간(초)' })
+  goodPostureSec!: number;
+
+  @ApiProperty({ description: '거북목 지속 시간(초)' })
+  turtleNeckSec!: number;
+
+  @ApiProperty({ description: '어깨 이슈 지속 시간(초, 라운드숄더+어깨 비대칭)' })
+  shoulderIssueSec!: number;
+
+  @ApiProperty({ description: '어둠 환경 지속 시간(초)' })
+  darkEnvSec!: number;
+
+  @ApiProperty({ description: '정자세 감지 횟수' })
+  goodPostureCount!: number;
+
+  @ApiProperty({ description: '거북목 감지 횟수' })
+  turtleNeckCount!: number;
+
+  @ApiProperty({ description: '어깨 이슈 감지 횟수' })
+  shoulderIssueCount!: number;
+
+  @ApiProperty({ description: '어둠 환경 감지 횟수' })
+  darkEnvCount!: number;
+
+  @ApiProperty({ description: '건강 점수 (0~100)', nullable: true })
+  healthScore!: number | null;
+
+  @ApiProperty({ description: '신규 획득 배지', type: [NewBadgeDto] })
+  newBadges!: NewBadgeDto[];
+}
+
+export class UploadEventsResponseDto {
+  @ApiProperty({ description: '저장된 이벤트 수' })
+  accepted!: number;
+}
