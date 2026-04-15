@@ -80,7 +80,6 @@ model UserSettings {
   reportPushWay         ReportPushWay @default(EMAIL) @map("report_push_way")
   pushEnabled           Boolean       @default(true) @map("push_enabled")
   soundEnabled          Boolean       @default(true) @map("sound_enabled")
-  avatarSkin            String?       @map("avatar_skin")
   updatedAt             DateTime      @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
