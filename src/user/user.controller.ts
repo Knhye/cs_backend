@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Patch,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -13,6 +14,10 @@ import {
   CurrentUserPayload,
 } from '../common/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import {
+  AvatarStateQueryDto,
+  AvatarStateResponseDto,
+} from './dto/avatar-state.dto.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 import {
   DarkDetectionResponseDto,
@@ -39,6 +44,22 @@ export class UserController {
     @CurrentUser() user: CurrentUserPayload,
   ): Promise<UserResponseDto> {
     return this.userService.getMe(user.id);
+  }
+
+  @Get('me/avatar-state')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '아바타 복합 증상 상태 요약 조회',
+    description:
+      '최근 windowSec(기본 60초, 10~600) 동안의 감지 이벤트를 기반으로 주요 증상/심각도를 반환합니다. GOOD_POSTURE는 제외됩니다.',
+  })
+  @ApiCommonResponse({ type: AvatarStateResponseDto })
+  async getAvatarState(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: AvatarStateQueryDto,
+  ): Promise<AvatarStateResponseDto> {
+    return this.userService.getAvatarState(user.id, query);
   }
 
   @Patch('me/settings')

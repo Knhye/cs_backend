@@ -23,6 +23,9 @@ export class UserSettingsDto {
 
   @ApiProperty({ description: '소리 알림 활성화' })
   soundEnabled: boolean;
+
+  @ApiProperty({ description: '아바타 후드 색상', example: 'default' })
+  avatarHoodColor: string;
 }
 
 export class UserResponseDto {

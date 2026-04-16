@@ -6,8 +6,14 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { DetectionType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service.js';
+import {
+  AvatarStateQueryDto,
+  AvatarStateResponseDto,
+  SymptomSummaryDto,
+} from './dto/avatar-state.dto.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 import {
   DarkDetectionResponseDto,
@@ -73,6 +79,9 @@ export class UserService {
           ...(dto.pushEnabled !== undefined && { pushEnabled: dto.pushEnabled }),
           ...(dto.soundEnabled !== undefined && {
             soundEnabled: dto.soundEnabled,
+          }),
+          ...(dto.avatarHoodColor !== undefined && {
+            avatarHoodColor: dto.avatarHoodColor,
           }),
         },
       });
@@ -155,6 +164,56 @@ export class UserService {
     }
   }
 
+  async getAvatarState(
+    userId: string,
+    query: AvatarStateQueryDto,
+  ): Promise<AvatarStateResponseDto> {
+    try {
+      const windowSec = query.windowSec ?? 60;
+      const now = new Date();
+      const since = new Date(now.getTime() - windowSec * 1000);
+
+      const [grouped, settings] = await Promise.all([
+        this.prisma.detectionEvent.groupBy({
+          by: ['type'],
+          where: {
+            userId,
+            detectedAt: { gte: since, lte: now },
+            type: { not: DetectionType.GOOD_POSTURE },
+          },
+          _sum: { durationSec: true },
+          _count: { _all: true },
+          _max: { severity: true },
+        }),
+        this.ensureSettings(userId),
+      ]);
+
+      const symptoms: SymptomSummaryDto[] = grouped
+        .map((g) => ({
+          type: g.type,
+          severity: g._max.severity ?? 1,
+          durationSec: g._sum.durationSec ?? 0,
+          count: g._count._all,
+        }))
+        .sort((a, b) => b.durationSec - a.durationSec);
+
+      const dominant = symptoms[0] ?? null;
+
+      return {
+        windowSec,
+        dominantSymptom: dominant ? dominant.type : null,
+        severity: dominant ? dominant.severity : null,
+        symptoms,
+        avatarHoodColor: settings.avatarHoodColor,
+      };
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException(
+        '서버 오류: 아바타 상태를 조회할 수 없습니다.',
+      );
+    }
+  }
+
   private async ensureSettings(userId: string) {
     return this.prisma.userSettings.upsert({
       where: { userId },
@@ -170,6 +229,7 @@ export class UserService {
     reportPushWay: UserSettingsDto['reportPushWay'];
     pushEnabled: boolean;
     soundEnabled: boolean;
+    avatarHoodColor: string;
   }): UserSettingsDto {
     return {
       brightnessThreshold: settings.brightnessThreshold,
@@ -178,6 +238,7 @@ export class UserService {
       reportPushWay: settings.reportPushWay,
       pushEnabled: settings.pushEnabled,
       soundEnabled: settings.soundEnabled,
+      avatarHoodColor: settings.avatarHoodColor,
     };
   }
 }

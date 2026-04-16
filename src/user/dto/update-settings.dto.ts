@@ -5,6 +5,8 @@ import {
   IsEnum,
   IsInt,
   IsOptional,
+  IsString,
+  Length,
   Max,
   Min,
 } from 'class-validator';
@@ -46,4 +48,16 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsBoolean()
   soundEnabled?: boolean;
+
+  @ApiProperty({
+    description: '아바타 후드 색상',
+    example: 'default',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 32, {
+    message: 'avatarHoodColor는 1~32자 사이여야 합니다.',
+  })
+  avatarHoodColor?: string;
 }
