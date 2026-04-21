@@ -14,6 +14,13 @@ import {
   CurrentUserPayload,
 } from '../common/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { BadgeService } from '../badge/badge.service.js';
+import { BadgeProgressResponseDto } from '../badge/dto/badge-progress-response.dto.js';
+import { MyBadgeDto } from '../badge/dto/badge-response.dto.js';
+import {
+  UpdateProfileDto,
+  UpdateProfileResponseDto,
+} from './dto/update-profile.dto.js';
 import {
   AvatarStateQueryDto,
   AvatarStateResponseDto,
@@ -33,7 +40,10 @@ import { UserService } from './user.service.js';
 @ApiTags('User')
 @Controller('users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly badgeService: BadgeService,
+  ) {}
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
@@ -84,6 +94,51 @@ export class UserController {
     @Body() dto: UpdateDarkDetectionDto,
   ): Promise<DarkDetectionResponseDto> {
     return this.userService.updateDarkDetection(user.id, dto);
+  }
+
+  @Patch('me/profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '프로필 수정',
+    description:
+      '이름 또는 프로필 이미지 URL을 수정합니다. profileImg에 null을 전달하면 이미지가 삭제됩니다.',
+  })
+  @ApiCommonResponse({ type: UpdateProfileResponseDto })
+  async updateProfile(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<UpdateProfileResponseDto> {
+    return this.userService.updateProfile(user.id, dto);
+  }
+
+  @Get('me/badges')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '내 배지 조회 (FR-05-02)',
+    description: '획득한 배지 목록과 획득 일시를 반환합니다.',
+  })
+  @ApiCommonResponse({ type: MyBadgeDto, isArray: true })
+  async getMyBadges(
+    @CurrentUser() user: CurrentUserPayload,
+  ): Promise<MyBadgeDto[]> {
+    return this.badgeService.getMyBadges(user.id);
+  }
+
+  @Get('me/badges/progress')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '배지 진행도 조회 (FR-05-03, FR-05-05)',
+    description:
+      'POSTURE_TIME(누적 바른 자세 시간)과 STREAK(연속 달성 일수) 카테고리별 진행도 및 다음 배지까지 남은 값을 반환합니다.',
+  })
+  @ApiCommonResponse({ type: BadgeProgressResponseDto })
+  async getMyBadgeProgress(
+    @CurrentUser() user: CurrentUserPayload,
+  ): Promise<BadgeProgressResponseDto> {
+    return this.badgeService.getProgress(user.id);
   }
 
   @Patch('me/password')

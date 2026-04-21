@@ -21,6 +21,10 @@ import {
 } from './dto/update-dark-detection.dto.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
 import {
+  UpdateProfileDto,
+  UpdateProfileResponseDto,
+} from './dto/update-profile.dto.js';
+import {
   UserResponseDto,
   UserSettingsDto,
 } from './dto/user-response.dto.js';
@@ -53,6 +57,33 @@ export class UserService {
       if (e instanceof HttpException) throw e;
       throw new InternalServerErrorException(
         '서버 오류: 회원 정보를 조회할 수 없습니다.',
+      );
+    }
+  }
+
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+  ): Promise<UpdateProfileResponseDto> {
+    try {
+      if (dto.name === undefined && dto.profileImg === undefined) {
+        throw new BadRequestException('수정할 항목을 하나 이상 입력해 주세요.');
+      }
+
+      const updated = await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.profileImg !== undefined && { profileImg: dto.profileImg }),
+        },
+        select: { id: true, name: true, profileImg: true },
+      });
+
+      return updated;
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException(
+        '서버 오류: 프로필을 수정할 수 없습니다.',
       );
     }
   }

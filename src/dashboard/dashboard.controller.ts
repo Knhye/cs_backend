@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { ApiCommonResponse } from '../common/decorators/api-common-response.decorator.js';
@@ -12,6 +12,10 @@ import {
   WeeklyQueryDto,
 } from './dto/dashboard-query.dto.js';
 import { DailyDashboardDto } from './dto/daily-response.dto.js';
+import {
+  CreateTimelineEntryDto,
+  CreateTimelineEntryResponseDto,
+} from './dto/timeline-create.dto.js';
 import { TimelineDashboardDto } from './dto/timeline-response.dto.js';
 import { TodayDashboardDto } from './dto/today-response.dto.js';
 import { WeeklyDashboardDto } from './dto/weekly-response.dto.js';
@@ -68,13 +72,28 @@ export class DashboardController {
     return this.dashboardService.getDaily(user.id, query.date);
   }
 
+  @Post('timeline')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '타임라인 항목 추가 (FR-04-04)',
+    description: '자세 변동 시 클라이언트가 타임라인 항목을 서버에 저장합니다.',
+  })
+  @ApiCommonResponse({ type: CreateTimelineEntryResponseDto })
+  async createTimelineEntry(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateTimelineEntryDto,
+  ): Promise<CreateTimelineEntryResponseDto> {
+    return this.dashboardService.createTimelineEntry(user.id, dto);
+  }
+
   @Get('timeline')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: '오늘 타임라인 (FR-04-04)',
-    description:
-      '특정 일자의 30분 단위(48개) 우세 상태와 건강 점수를 반환합니다.',
+    summary: '날짜별 타임라인 조회 (FR-04-04)',
+    description: '저장된 타임라인 항목을 시각 오름차순으로 반환합니다.',
   })
   @ApiCommonResponse({ type: TimelineDashboardDto })
   async getTimeline(

@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DetectionType, Prisma } from '@prisma/client';
+import { BadgeService } from '../badge/badge.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EndSessionDto } from './dto/end-session.dto.js';
 import {
@@ -32,7 +33,10 @@ interface AggregateBuckets {
 
 @Injectable()
 export class SessionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly badgeService: BadgeService,
+  ) {}
 
   async start(
     userId: string,
@@ -144,7 +148,7 @@ export class SessionService {
 
       await this.recomputeDailyHealthScore(userId, seoulDate);
 
-      const newBadges = await this.evaluateNewBadges();
+      const newBadges = await this.badgeService.evaluateNewBadges(userId);
 
       return {
         sessionId,
@@ -309,7 +313,4 @@ export class SessionService {
     );
   }
 
-  private async evaluateNewBadges(): Promise<NewBadgeDto[]> {
-    return [];
-  }
 }

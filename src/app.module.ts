@@ -6,6 +6,8 @@ import { AuthModule } from './auth/auth.module.js';
 import { UserModule } from './user/user.module.js';
 import { SessionModule } from './session/session.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
+import { BadgeModule } from './badge/badge.module.js';
+import { ReportModule } from './report/report.module.js';
 import { AppController } from './app.controller.js';
 
 @Module({
@@ -18,6 +20,8 @@ import { AppController } from './app.controller.js';
     UserModule,
     SessionModule,
     DashboardModule,
+    BadgeModule,
+    ReportModule,
   ],
 })
 export class AppModule {}

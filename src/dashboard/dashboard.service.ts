@@ -11,9 +11,12 @@ import {
   DailyHourDto,
 } from './dto/daily-response.dto.js';
 import {
+  CreateTimelineEntryDto,
+  CreateTimelineEntryResponseDto,
+} from './dto/timeline-create.dto.js';
+import {
   TimelineBucketDto,
   TimelineDashboardDto,
-  TimelineDominantState,
 } from './dto/timeline-response.dto.js';
 import {
   TodayBreakdownDto,
@@ -241,6 +244,35 @@ export class DashboardService {
     }
   }
 
+  async createTimelineEntry(
+    userId: string,
+    dto: CreateTimelineEntryDto,
+  ): Promise<CreateTimelineEntryResponseDto> {
+    try {
+      const date = this.parseDate(dto.date);
+      if (!date) {
+        throw new BadRequestException('date는 YYYY-MM-DD 형식이어야 합니다.');
+      }
+
+      await this.prisma.timelineEntry.create({
+        data: {
+          userId,
+          date,
+          time: dto.time,
+          dominantState: dto.dominantState,
+          message: dto.message ?? '',
+        },
+      });
+
+      return { accepted: 1 };
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException(
+        '서버 오류: 타임라인 항목을 저장할 수 없습니다.',
+      );
+    }
+  }
+
   async getTimeline(
     userId: string,
     dateStr: string,
@@ -251,70 +283,19 @@ export class DashboardService {
         throw new BadRequestException('date는 YYYY-MM-DD 형식이어야 합니다.');
       }
 
-      const events = await this.fetchSeoulDayEvents(userId, date);
-
-      type Bucket = {
-        good: number;
-        turtleNeck: number;
-        shoulder: number;
-        dark: number;
-      };
-      const buckets: Bucket[] = Array.from({ length: 48 }, () => ({
-        good: 0,
-        turtleNeck: 0,
-        shoulder: 0,
-        dark: 0,
-      }));
-
-      for (const e of events) {
-        const { hour, minute } = this.seoulHourMinute(e.detectedAt);
-        const idx = hour * 2 + (minute >= 30 ? 1 : 0);
-        const b = buckets[idx];
-        switch (e.type) {
-          case DetectionType.GOOD_POSTURE:
-            b.good += e.durationSec;
-            break;
-          case DetectionType.TURTLE_NECK:
-            b.turtleNeck += e.durationSec;
-            break;
-          case DetectionType.ROUND_SHOULDER:
-          case DetectionType.SHOULDER_ASYMMETRY:
-            b.shoulder += e.durationSec;
-            break;
-          case DetectionType.DARK_ENV:
-            b.dark += e.durationSec;
-            break;
-        }
-      }
-
-      const result: TimelineBucketDto[] = buckets.map((b, idx) => {
-        const total = b.good + b.turtleNeck + b.shoulder + b.dark;
-        let dominantState: TimelineDominantState | null = null;
-        let healthScore: number | null = null;
-        if (total > 0) {
-          const entries: Array<[TimelineDominantState, number]> = [
-            ['GOOD', b.good],
-            ['TURTLE_NECK', b.turtleNeck],
-            ['SHOULDER_ISSUE', b.shoulder],
-            ['DARK_ENV', b.dark],
-          ];
-          dominantState = entries.reduce((acc, cur) =>
-            cur[1] > acc[1] ? cur : acc,
-          )[0];
-          healthScore = Math.max(
-            0,
-            Math.min(100, Math.round((b.good / total) * 100)),
-          );
-        }
-        return {
-          startHour: Math.floor(idx / 2),
-          startMin: (idx % 2) * 30,
-          dominantState,
-          healthScore,
-        };
+      const entries = await this.prisma.timelineEntry.findMany({
+        where: { userId, date },
+        orderBy: { time: 'asc' },
+        select: { time: true, dominantState: true, message: true },
       });
 
-      return { date: dateStr, buckets: result };
+      const buckets: TimelineBucketDto[] = entries.map((e) => ({
+        time: e.time,
+        dominantState: e.dominantState as TimelineBucketDto['dominantState'],
+        message: e.message,
+      }));
+
+      return { date: dateStr, buckets };
     } catch (e) {
       if (e instanceof HttpException) throw e;
       throw new InternalServerErrorException(

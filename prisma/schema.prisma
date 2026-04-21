@@ -54,6 +54,7 @@ model User {
   dailyStats        DailyStat[]
   userBadges        UserBadge[]
   weeklyReports     WeeklyReport[]
+  timelineEntries   TimelineEntry[]
 
   @@unique([provider, providerId])
   @@map("users")
@@ -197,4 +198,19 @@ model WeeklyReport {
   @@index([userId, weekStartDate])
   @@index([status, createdAt])
   @@map("weekly_reports")
+}
+
+model TimelineEntry {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  date          DateTime @db.Date
+  time          String   @db.VarChar(5)
+  dominantState String   @map("dominant_state")
+  message       String   @default("")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("timeline_entries")
 }
