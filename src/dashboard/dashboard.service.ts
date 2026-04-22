@@ -83,31 +83,43 @@ export class DashboardService {
       const byDate = new Map(stats.map((s) => [this.formatDate(s.date), s]));
 
       const days: WeeklyDayDto[] = [];
+      let turtleNeckTotalSec = 0;
+      let roundShoulderTotalSec = 0;
+      let shoulderAsymmetryTotalSec = 0;
+      let darkEnvTotalSec = 0;
+      let weeklyGoodPostureSec = 0;
+      let weeklyTotalDetectionSec = 0;
+
       for (let i = 0; i < 7; i++) {
         const d = this.addDays(from, i);
         const key = this.formatDate(d);
         const s = byDate.get(key);
-        days.push({
-          date: key,
-          totalDetectionSec: s?.totalDetectionSec ?? 0,
-          healthScore: s?.healthScore ?? null,
-          goodPostureSec: s?.goodPostureSec ?? 0,
-          turtleNeckSec: s?.turtleNeckSec ?? 0,
-          roundShoulderSec: s?.roundShoulderSec ?? 0,
-          shoulderAsymmetrySec: s?.shoulderAsymmetrySec ?? 0,
-          darkEnvSec: s?.darkEnvSec ?? 0,
-          goodPostureCount: s?.goodPostureCount ?? 0,
-          turtleNeckCount: s?.turtleNeckCount ?? 0,
-          roundShoulderCount: s?.roundShoulderCount ?? 0,
-          shoulderAsymmetryCount: s?.shoulderAsymmetryCount ?? 0,
-          darkEnvCount: s?.darkEnvCount ?? 0,
-        });
+
+        const totalSec = s?.totalDetectionSec ?? 0;
+        const goodSec = s?.goodPostureSec ?? 0;
+        const badPostureRatio = totalSec > 0
+          ? Math.round(((totalSec - goodSec) / totalSec) * 100)
+          : 0;
+
+        turtleNeckTotalSec += s?.turtleNeckSec ?? 0;
+        roundShoulderTotalSec += s?.roundShoulderSec ?? 0;
+        shoulderAsymmetryTotalSec += s?.shoulderAsymmetrySec ?? 0;
+        darkEnvTotalSec += s?.darkEnvSec ?? 0;
+        weeklyGoodPostureSec += goodSec;
+        weeklyTotalDetectionSec += totalSec;
+
+        days.push({ date: key, badPostureRatio });
       }
+
+      const goodPostureRatio = weeklyTotalDetectionSec > 0
+        ? Math.round((weeklyGoodPostureSec / weeklyTotalDetectionSec) * 100)
+        : 0;
 
       let worstWeekday: Weekday | null = null;
       let worstScore = Number.POSITIVE_INFINITY;
-      for (let i = 0; i < days.length; i++) {
-        const score = days[i].healthScore;
+      for (let i = 0; i < 7; i++) {
+        const key = this.formatDate(this.addDays(from, i));
+        const score = byDate.get(key)?.healthScore ?? null;
         if (score == null) continue;
         if (score < worstScore) {
           worstScore = score;
@@ -115,36 +127,16 @@ export class DashboardService {
         }
       }
 
-      const events = await this.prisma.detectionEvent.findMany({
-        where: {
-          userId,
-          detectedAt: {
-            gte: this.seoulDayStartUtc(from),
-            lt: this.seoulDayStartUtc(this.addDays(to, 1)),
-          },
-          type: { not: DetectionType.GOOD_POSTURE },
-        },
-        select: { detectedAt: true, durationSec: true },
-      });
-      const hourSec = new Array(24).fill(0) as number[];
-      for (const e of events) {
-        hourSec[this.seoulHour(e.detectedAt)] += e.durationSec;
-      }
-      let worstHour: number | null = null;
-      let maxSec = 0;
-      for (let h = 0; h < 24; h++) {
-        if (hourSec[h] > maxSec) {
-          maxSec = hourSec[h];
-          worstHour = h;
-        }
-      }
-
       return {
         from: fromStr,
         to: this.formatDate(to),
         days,
+        turtleNeckTotalSec,
+        roundShoulderTotalSec,
+        shoulderAsymmetryTotalSec,
+        darkEnvTotalSec,
+        goodPostureRatio,
         worstWeekday,
-        worstHour,
       };
     } catch (e) {
       if (e instanceof HttpException) throw e;
