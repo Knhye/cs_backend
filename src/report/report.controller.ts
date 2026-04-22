@@ -17,7 +17,6 @@ import {
 } from '../common/decorators/current-user.decorator.js';
 import { ReportHistoryQueryDto } from './dto/report-query.dto.js';
 import {
-  CurrentReportResponseDto,
   ReportDetailResponseDto,
   ReportHistoryResponseDto,
   ResendResponseDto,
@@ -28,21 +27,6 @@ import { ReportService } from './report.service.js';
 @Controller('users/me/reports')
 export class ReportController {
   constructor(private readonly reportService: ReportService) {}
-
-  @Get('current')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: '이번 주 리포트 미리보기 (FR-06-01)',
-    description:
-      '이번 주(월~일) KST 기준 데이터를 실시간 집계하여 반환합니다. 스냅샷이 아닌 라이브 데이터입니다.',
-  })
-  @ApiCommonResponse({ type: CurrentReportResponseDto })
-  async getCurrentReport(
-    @CurrentUser() user: CurrentUserPayload,
-  ): Promise<CurrentReportResponseDto> {
-    return this.reportService.getCurrentReport(user.id);
-  }
 
   @Get()
   @UseGuards(JwtAuthGuard)

@@ -28,18 +28,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export class ReportService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getCurrentReport(userId: string): Promise<CurrentReportResponseDto> {
-    try {
-      const { weekStart, weekEnd } = this.currentWeekRange();
-      return this.buildPayload(userId, weekStart, weekEnd);
-    } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 현재 리포트를 조회할 수 없습니다.',
-      );
-    }
-  }
-
   async getReportHistory(
     userId: string,
     query: ReportHistoryQueryDto,
