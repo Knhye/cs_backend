@@ -17,7 +17,7 @@ import {
   CreateTimelineEntryResponseDto,
 } from './dto/timeline-create.dto.js';
 import { TimelineDashboardDto } from './dto/timeline-response.dto.js';
-import { TodayDashboardDto } from './dto/today-response.dto.js';
+import { TodayHealthScoreDto } from './dto/today-response.dto.js';
 import { WeeklyDashboardDto } from './dto/weekly-response.dto.js';
 
 @ApiTags('Dashboard')
@@ -29,15 +29,15 @@ export class DashboardController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: '오늘 대시보드 (FR-04-01, FR-04-05)',
+    summary: '오늘의 건강 점수 (FR-04-01)',
     description:
-      'Asia/Seoul 기준 오늘 daily_stats 집계와 어둠 감지 모드 ON/OFF를 반환합니다.',
+      'Asia/Seoul 기준 오늘의 자세 점수, 경고 횟수, 어제/지난주 대비 변화율을 반환합니다.',
   })
-  @ApiCommonResponse({ type: TodayDashboardDto })
+  @ApiCommonResponse({ type: TodayHealthScoreDto })
   async getToday(
     @CurrentUser() user: CurrentUserPayload,
-  ): Promise<TodayDashboardDto> {
-    return this.dashboardService.getToday(user.id);
+  ): Promise<TodayHealthScoreDto> {
+    return this.dashboardService.getTodayHealthScore(user.id);
   }
 
   @Get('weekly')

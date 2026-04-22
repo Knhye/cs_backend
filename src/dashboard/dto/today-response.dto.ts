@@ -1,41 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class TodayBreakdownDto {
-  @ApiProperty({ description: '거북목 지속 시간(초)' })
-  turtleNeckSec!: number;
-
-  @ApiProperty({ description: '어깨 이슈 지속 시간(초)' })
-  shoulderIssueSec!: number;
-
-  @ApiProperty({ description: '어둠 환경 지속 시간(초)' })
-  darkEnvSec!: number;
-
-  @ApiProperty({ description: '거북목 감지 횟수' })
-  turtleNeckCount!: number;
-
-  @ApiProperty({ description: '어깨 이슈 감지 횟수' })
-  shoulderIssueCount!: number;
-
-  @ApiProperty({ description: '어둠 환경 감지 횟수' })
-  darkEnvCount!: number;
-}
-
-export class TodayDashboardDto {
-  @ApiProperty({ description: '오늘 일자(YYYY-MM-DD, Asia/Seoul)', example: '2026-04-11' })
+export class TodayHealthScoreDto {
+  @ApiProperty({ description: '오늘 일자(YYYY-MM-DD, Asia/Seoul)', example: '2026-04-22' })
   date!: string;
 
-  @ApiProperty({ description: '오늘 건강 점수 (0~100)', nullable: true, example: 78 })
-  healthScore!: number | null;
+  @ApiProperty({ description: '자세 점수 (0~100)', nullable: true, example: 82 })
+  postureScore!: number | null;
 
-  @ApiProperty({ description: '오늘 총 감지 시간(초)' })
-  totalDetectionSec!: number;
+  @ApiProperty({ description: '경고 횟수 (모든 자세 경고 합산)', example: 15 })
+  warningCount!: number;
 
-  @ApiProperty({ description: '정자세 비율 (0~1)', example: 0.66 })
-  goodPostureRatio!: number;
+  @ApiProperty({ description: '어제 대비 건강 점수 변화율(%)', nullable: true, example: 5.3 })
+  vsYesterday!: number | null;
 
-  @ApiProperty({ description: '자세 이슈/어둠 환경 분류별 집계', type: TodayBreakdownDto })
-  breakdown!: TodayBreakdownDto;
-
-  @ApiProperty({ description: '어둠 감지 모드 ON/OFF', enum: ['ON', 'OFF'] })
-  darkDetectionMode!: 'ON' | 'OFF';
+  @ApiProperty({ description: '지난주 같은 요일 대비 건강 점수 변화율(%)', nullable: true, example: -2.1 })
+  vsLastWeek!: number | null;
 }

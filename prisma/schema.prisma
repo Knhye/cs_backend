@@ -131,19 +131,23 @@ model DetectionEvent {
 }
 
 model DailyStat {
-  id                 String   @id @default(uuid())
-  userId             String   @map("user_id")
-  date               DateTime @db.Date
-  totalDetectionSec  Int      @default(0) @map("total_detection_sec")
-  goodPostureSec     Int      @default(0) @map("good_posture_sec")
-  turtleNeckSec      Int      @default(0) @map("turtle_neck_sec")
-  shoulderIssueSec   Int      @default(0) @map("shoulder_issue_sec")
-  darkEnvSec         Int      @default(0) @map("dark_env_sec")
-  goodPostureCount   Int      @default(0) @map("good_posture_count")
-  turtleNeckCount    Int      @default(0) @map("turtle_neck_count")
-  shoulderIssueCount Int      @default(0) @map("shoulder_issue_count")
-  darkEnvCount       Int      @default(0) @map("dark_env_count")
-  healthScore        Int?     @map("health_score")
+  id                     String   @id @default(uuid())
+  userId                 String   @map("user_id")
+  date                   DateTime @db.Date
+  totalDetectionSec      Int      @default(0) @map("total_detection_sec")
+  goodPostureSec         Int      @default(0) @map("good_posture_sec")
+  turtleNeckSec          Int      @default(0) @map("turtle_neck_sec")
+  roundShoulderSec       Int      @default(0) @map("round_shoulder_sec")
+  shoulderAsymmetrySec   Int      @default(0) @map("shoulder_asymmetry_sec")
+  darkEnvSec             Int      @default(0) @map("dark_env_sec")
+  goodPostureCount       Int      @default(0) @map("good_posture_count")
+  turtleNeckCount        Int      @default(0) @map("turtle_neck_count")
+  roundShoulderCount     Int      @default(0) @map("round_shoulder_count")
+  shoulderAsymmetryCount Int      @default(0) @map("shoulder_asymmetry_count")
+  darkEnvCount           Int      @default(0) @map("dark_env_count")
+  healthScore            Int?     @map("health_score")
+  postureScore           Int?     @map("posture_score")
+  warningCount           Int      @default(0) @map("warning_count")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

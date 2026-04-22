@@ -25,8 +25,10 @@ interface AggregateBuckets {
   goodPostureCount: number;
   turtleNeckSec: number;
   turtleNeckCount: number;
-  shoulderIssueSec: number;
-  shoulderIssueCount: number;
+  roundShoulderSec: number;
+  roundShoulderCount: number;
+  shoulderAsymmetrySec: number;
+  shoulderAsymmetryCount: number;
   darkEnvSec: number;
   darkEnvCount: number;
 }
@@ -98,6 +100,8 @@ export class SessionService {
       );
 
       const seoulDate = this.toSeoulDate(endedAt);
+      const shoulderIssueSec = buckets.roundShoulderSec + buckets.shoulderAsymmetrySec;
+      const shoulderIssueCount = buckets.roundShoulderCount + buckets.shoulderAsymmetryCount;
 
       await this.prisma.$transaction([
         this.prisma.detectionSession.update({
@@ -107,11 +111,11 @@ export class SessionService {
             totalDurationSec,
             goodPostureSec: buckets.goodPostureSec,
             turtleNeckSec: buckets.turtleNeckSec,
-            shoulderIssueSec: buckets.shoulderIssueSec,
+            shoulderIssueSec,
             darkEnvSec: buckets.darkEnvSec,
             goodPostureCount: buckets.goodPostureCount,
             turtleNeckCount: buckets.turtleNeckCount,
-            shoulderIssueCount: buckets.shoulderIssueCount,
+            shoulderIssueCount,
             darkEnvCount: buckets.darkEnvCount,
             healthScore,
           },
@@ -124,11 +128,13 @@ export class SessionService {
             totalDetectionSec: totalDurationSec,
             goodPostureSec: buckets.goodPostureSec,
             turtleNeckSec: buckets.turtleNeckSec,
-            shoulderIssueSec: buckets.shoulderIssueSec,
+            roundShoulderSec: buckets.roundShoulderSec,
+            shoulderAsymmetrySec: buckets.shoulderAsymmetrySec,
             darkEnvSec: buckets.darkEnvSec,
             goodPostureCount: buckets.goodPostureCount,
             turtleNeckCount: buckets.turtleNeckCount,
-            shoulderIssueCount: buckets.shoulderIssueCount,
+            roundShoulderCount: buckets.roundShoulderCount,
+            shoulderAsymmetryCount: buckets.shoulderAsymmetryCount,
             darkEnvCount: buckets.darkEnvCount,
             healthScore,
           },
@@ -136,17 +142,19 @@ export class SessionService {
             totalDetectionSec: { increment: totalDurationSec },
             goodPostureSec: { increment: buckets.goodPostureSec },
             turtleNeckSec: { increment: buckets.turtleNeckSec },
-            shoulderIssueSec: { increment: buckets.shoulderIssueSec },
+            roundShoulderSec: { increment: buckets.roundShoulderSec },
+            shoulderAsymmetrySec: { increment: buckets.shoulderAsymmetrySec },
             darkEnvSec: { increment: buckets.darkEnvSec },
             goodPostureCount: { increment: buckets.goodPostureCount },
             turtleNeckCount: { increment: buckets.turtleNeckCount },
-            shoulderIssueCount: { increment: buckets.shoulderIssueCount },
+            roundShoulderCount: { increment: buckets.roundShoulderCount },
+            shoulderAsymmetryCount: { increment: buckets.shoulderAsymmetryCount },
             darkEnvCount: { increment: buckets.darkEnvCount },
           },
         }),
       ]);
 
-      await this.recomputeDailyHealthScore(userId, seoulDate);
+      await this.recomputeDailyScores(userId, seoulDate);
 
       const newBadges = await this.badgeService.evaluateNewBadges(userId);
 
@@ -155,11 +163,11 @@ export class SessionService {
         totalDurationSec,
         goodPostureSec: buckets.goodPostureSec,
         turtleNeckSec: buckets.turtleNeckSec,
-        shoulderIssueSec: buckets.shoulderIssueSec,
+        shoulderIssueSec,
         darkEnvSec: buckets.darkEnvSec,
         goodPostureCount: buckets.goodPostureCount,
         turtleNeckCount: buckets.turtleNeckCount,
-        shoulderIssueCount: buckets.shoulderIssueCount,
+        shoulderIssueCount,
         darkEnvCount: buckets.darkEnvCount,
         healthScore,
         newBadges,
@@ -240,8 +248,10 @@ export class SessionService {
       goodPostureCount: 0,
       turtleNeckSec: 0,
       turtleNeckCount: 0,
-      shoulderIssueSec: 0,
-      shoulderIssueCount: 0,
+      roundShoulderSec: 0,
+      roundShoulderCount: 0,
+      shoulderAsymmetrySec: 0,
+      shoulderAsymmetryCount: 0,
       darkEnvSec: 0,
       darkEnvCount: 0,
     };
@@ -259,9 +269,12 @@ export class SessionService {
           buckets.turtleNeckCount += count;
           break;
         case DetectionType.ROUND_SHOULDER:
+          buckets.roundShoulderSec += sec;
+          buckets.roundShoulderCount += count;
+          break;
         case DetectionType.SHOULDER_ASYMMETRY:
-          buckets.shoulderIssueSec += sec;
-          buckets.shoulderIssueCount += count;
+          buckets.shoulderAsymmetrySec += sec;
+          buckets.shoulderAsymmetryCount += count;
           break;
         case DetectionType.DARK_ENV:
           buckets.darkEnvSec += sec;
@@ -278,28 +291,46 @@ export class SessionService {
     totalDurationSec: number,
   ): number | null {
     if (totalDurationSec <= 0) return null;
-    const ratio = goodPostureSec / totalDurationSec;
-    return Math.max(0, Math.min(100, Math.round(ratio * 100)));
+    return Math.max(0, Math.min(100, Math.round((goodPostureSec / totalDurationSec) * 100)));
   }
 
-  private async recomputeDailyHealthScore(
-    userId: string,
-    date: Date,
-  ): Promise<void> {
+  private computePostureScore(
+    stat: {
+      turtleNeckSec: number;
+      roundShoulderSec: number;
+      shoulderAsymmetrySec: number;
+      darkEnvSec: number;
+      totalDetectionSec: number;
+    },
+  ): number | null {
+    if (stat.totalDetectionSec <= 0) return null;
+    const t = stat.totalDetectionSec;
+    const score = 100
+      - (stat.turtleNeckSec / t) * 30
+      - (stat.roundShoulderSec / t) * 30
+      - (stat.shoulderAsymmetrySec / t) * 30
+      - (stat.darkEnvSec / t) * 10;
+    return Math.max(0, Math.round(score));
+  }
+
+  private async recomputeDailyScores(userId: string, date: Date): Promise<void> {
     const stat = await this.prisma.dailyStat.findUnique({
       where: { userId_date: { userId, date } },
     });
     if (!stat) return;
-    const score = this.computeHealthScore(
-      stat.goodPostureSec,
-      stat.totalDetectionSec,
-    );
-    if (score !== stat.healthScore) {
-      await this.prisma.dailyStat.update({
-        where: { userId_date: { userId, date } },
-        data: { healthScore: score },
-      });
-    }
+
+    const healthScore = this.computeHealthScore(stat.goodPostureSec, stat.totalDetectionSec);
+    const postureScore = this.computePostureScore(stat);
+    const warningCount =
+      stat.turtleNeckCount +
+      stat.roundShoulderCount +
+      stat.shoulderAsymmetryCount +
+      stat.darkEnvCount;
+
+    await this.prisma.dailyStat.update({
+      where: { userId_date: { userId, date } },
+      data: { healthScore, postureScore, warningCount },
+    });
   }
 
   private toSeoulDate(date: Date): Date {

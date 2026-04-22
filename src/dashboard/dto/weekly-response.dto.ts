@@ -27,8 +27,11 @@ export class WeeklyDayDto {
   @ApiProperty({ description: '거북목 지속 시간(초)' })
   turtleNeckSec!: number;
 
-  @ApiProperty({ description: '어깨 이슈 지속 시간(초)' })
-  shoulderIssueSec!: number;
+  @ApiProperty({ description: '라운드 숄더 지속 시간(초)' })
+  roundShoulderSec!: number;
+
+  @ApiProperty({ description: '어깨 비대칭 지속 시간(초)' })
+  shoulderAsymmetrySec!: number;
 
   @ApiProperty({ description: '어둠 환경 지속 시간(초)' })
   darkEnvSec!: number;
@@ -39,8 +42,11 @@ export class WeeklyDayDto {
   @ApiProperty({ description: '거북목 감지 횟수' })
   turtleNeckCount!: number;
 
-  @ApiProperty({ description: '어깨 이슈 감지 횟수' })
-  shoulderIssueCount!: number;
+  @ApiProperty({ description: '라운드 숄더 감지 횟수' })
+  roundShoulderCount!: number;
+
+  @ApiProperty({ description: '어깨 비대칭 감지 횟수' })
+  shoulderAsymmetryCount!: number;
 
   @ApiProperty({ description: '어둠 환경 감지 횟수' })
   darkEnvCount!: number;

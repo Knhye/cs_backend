@@ -18,10 +18,7 @@ import {
   TimelineBucketDto,
   TimelineDashboardDto,
 } from './dto/timeline-response.dto.js';
-import {
-  TodayBreakdownDto,
-  TodayDashboardDto,
-} from './dto/today-response.dto.js';
+import { TodayHealthScoreDto } from './dto/today-response.dto.js';
 import {
   WEEKDAY_VALUES,
   Weekday,
@@ -36,43 +33,32 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getToday(userId: string): Promise<TodayDashboardDto> {
+  async getTodayHealthScore(userId: string): Promise<TodayHealthScoreDto> {
     try {
       const today = this.todaySeoulDate();
-      const [stat, settings] = await Promise.all([
-        this.prisma.dailyStat.findUnique({
-          where: { userId_date: { userId, date: today } },
-        }),
-        this.prisma.userSettings.findUnique({ where: { userId } }),
+      const yesterday = this.addDays(today, -1);
+      const lastWeekSameDay = this.addDays(today, -7);
+
+      const [todayStat, yesterdayStat, lastWeekStat] = await Promise.all([
+        this.prisma.dailyStat.findUnique({ where: { userId_date: { userId, date: today } } }),
+        this.prisma.dailyStat.findUnique({ where: { userId_date: { userId, date: yesterday } } }),
+        this.prisma.dailyStat.findUnique({ where: { userId_date: { userId, date: lastWeekSameDay } } }),
       ]);
 
-      const total = stat?.totalDetectionSec ?? 0;
-      const good = stat?.goodPostureSec ?? 0;
-      const goodRatio =
-        total > 0 ? Math.round((good / total) * 100) / 100 : 0;
-
-      const breakdown: TodayBreakdownDto = {
-        turtleNeckSec: stat?.turtleNeckSec ?? 0,
-        shoulderIssueSec: stat?.shoulderIssueSec ?? 0,
-        darkEnvSec: stat?.darkEnvSec ?? 0,
-        turtleNeckCount: stat?.turtleNeckCount ?? 0,
-        shoulderIssueCount: stat?.shoulderIssueCount ?? 0,
-        darkEnvCount: stat?.darkEnvCount ?? 0,
-      };
+      const postureScore = todayStat?.postureScore ?? null;
+      const warningCount = todayStat?.warningCount ?? 0;
 
       return {
         date: this.formatDate(today),
-        healthScore: stat?.healthScore ?? null,
-        totalDetectionSec: total,
-        goodPostureRatio: goodRatio,
-        breakdown,
-        darkDetectionMode:
-          settings?.darkDetectionEnabled === false ? 'OFF' : 'ON',
+        postureScore,
+        warningCount,
+        vsYesterday: this.calcPctChange(postureScore, yesterdayStat?.postureScore ?? null),
+        vsLastWeek: this.calcPctChange(postureScore, lastWeekStat?.postureScore ?? null),
       };
     } catch (e) {
       if (e instanceof HttpException) throw e;
       throw new InternalServerErrorException(
-        '서버 오류: 오늘 대시보드를 조회할 수 없습니다.',
+        '서버 오류: 오늘의 건강 점수를 조회할 수 없습니다.',
       );
     }
   }
@@ -107,11 +93,13 @@ export class DashboardService {
           healthScore: s?.healthScore ?? null,
           goodPostureSec: s?.goodPostureSec ?? 0,
           turtleNeckSec: s?.turtleNeckSec ?? 0,
-          shoulderIssueSec: s?.shoulderIssueSec ?? 0,
+          roundShoulderSec: s?.roundShoulderSec ?? 0,
+          shoulderAsymmetrySec: s?.shoulderAsymmetrySec ?? 0,
           darkEnvSec: s?.darkEnvSec ?? 0,
           goodPostureCount: s?.goodPostureCount ?? 0,
           turtleNeckCount: s?.turtleNeckCount ?? 0,
-          shoulderIssueCount: s?.shoulderIssueCount ?? 0,
+          roundShoulderCount: s?.roundShoulderCount ?? 0,
+          shoulderAsymmetryCount: s?.shoulderAsymmetryCount ?? 0,
           darkEnvCount: s?.darkEnvCount ?? 0,
         });
       }
@@ -358,6 +346,11 @@ export class DashboardService {
   private seoulHourMinute(d: Date): { hour: number; minute: number } {
     const s = new Date(d.getTime() + SEOUL_OFFSET_MS);
     return { hour: s.getUTCHours(), minute: s.getUTCMinutes() };
+  }
+
+  private calcPctChange(current: number | null, prev: number | null): number | null {
+    if (current === null || prev === null || prev === 0) return null;
+    return Math.round(((current - prev) / prev) * 1000) / 10;
   }
 
   private todaySeoulDate(): Date {
