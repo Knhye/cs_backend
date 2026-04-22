@@ -25,4 +25,4 @@ COPY --from=builder /app/node_modules ./node_modules
 
 EXPOSE 8080
 
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]
