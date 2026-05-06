@@ -31,7 +31,6 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
 
       - name: Wait for Quality Gate
         id: quality-gate
@@ -39,7 +38,6 @@ jobs:
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
 
       - name: Block merge on Quality Gate failure
         if: steps.quality-gate.outputs.quality-gate-status != 'PASSED'
