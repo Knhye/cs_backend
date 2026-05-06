@@ -32,8 +32,9 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: Debug report-task.txt
-        run: cat .scannerwork/report-task.txt
+      - name: Debug curl test
+        run: |
+          curl -v --user "${{ secrets.SONAR_TOKEN }}": "https://sonarcloud.io/api/ce/task?id=AZ38QgRIrmvY_3DNnVCR"
 
       - name: Wait for Quality Gate
         id: quality-gate
