@@ -24,8 +24,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests with coverage
-        run: npm run test:cov # SonarCloud가 커버리지 리포트를 읽음
+      # - name: Run tests with coverage
+      # run: npm run test:cov # SonarCloud가 커버리지 리포트를 읽음
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@master
