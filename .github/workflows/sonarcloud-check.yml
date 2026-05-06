@@ -32,8 +32,11 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: Debug report-task.txt
-        run: cat .scannerwork/report-task.txt
+      - name: Debug curl test
+        run: |
+          CE_TASK_URL=$(grep 'ceTaskUrl' .scannerwork/report-task.txt | cut -d'=' -f2)
+          echo "ceTaskUrl: $CE_TASK_URL"
+          curl -v --user "${{ secrets.SONAR_TOKEN }}": "$CE_TASK_URL"
 
       - name: Wait for Quality Gate
         id: quality-gate
