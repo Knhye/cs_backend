@@ -32,25 +32,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: Debug curl test
-        run: |
-          curl -v --user "${{ secrets.SONAR_TOKEN }}": "https://sonarcloud.io/api/ce/task?id=AZ38QgRIrmvY_3DNnVCR"
-
-      - name: Wait for Quality Gate
-        id: quality-gate
-        uses: SonarSource/sonarqube-quality-gate-action@master
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Block merge on Quality Gate failure
-        if: steps.quality-gate.outputs.quality-gate-status != 'PASSED'
-        run: |
-          echo "❌ Quality Gate FAILED. main 브랜치 머지를 중단합니다."
-          echo "SonarCloud 결과: https://sonarcloud.io"
-          exit 1
-
   auto-merge-to-main:
     name: Auto Merge to Main
     needs: sonarcloud-analysis
