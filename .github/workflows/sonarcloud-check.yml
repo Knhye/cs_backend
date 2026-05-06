@@ -32,6 +32,9 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+      - name: Debug report-task.txt
+        run: cat .scannerwork/report-task.txt
+
       - name: Wait for Quality Gate
         id: quality-gate
         uses: SonarSource/sonarqube-quality-gate-action@master
