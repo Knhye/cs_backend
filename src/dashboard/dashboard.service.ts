@@ -1,8 +1,6 @@
 import {
   BadRequestException,
-  HttpException,
   Injectable,
-  InternalServerErrorException,
 } from '@nestjs/common';
 import { DetectionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -25,9 +23,15 @@ import {
   WeeklyDashboardDto,
   WeeklyDayDto,
 } from './dto/weekly-response.dto.js';
-
-const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+import {
+  addDays,
+  formatDate,
+  parseDate,
+  seoulDayStartUtc,
+  seoulHour,
+  todaySeoulDate,
+} from '../common/utils/date.util.js';
+import { rethrowAsInternal } from '../common/utils/error.util.js';
 
 @Injectable()
 export class DashboardService {
@@ -35,9 +39,9 @@ export class DashboardService {
 
   async getTodayHealthScore(userId: string): Promise<TodayHealthScoreDto> {
     try {
-      const today = this.todaySeoulDate();
-      const yesterday = this.addDays(today, -1);
-      const lastWeekSameDay = this.addDays(today, -7);
+      const today = todaySeoulDate();
+      const yesterday = addDays(today, -1);
+      const lastWeekSameDay = addDays(today, -7);
 
       const [todayStat, yesterdayStat, lastWeekStat] = await Promise.all([
         this.prisma.dailyStat.findUnique({ where: { userId_date: { userId, date: today } } }),
@@ -49,17 +53,14 @@ export class DashboardService {
       const warningCount = todayStat?.warningCount ?? 0;
 
       return {
-        date: this.formatDate(today),
+        date: formatDate(today),
         postureScore,
         warningCount,
         vsYesterday: this.calcPctChange(postureScore, yesterdayStat?.postureScore ?? null),
         vsLastWeek: this.calcPctChange(postureScore, lastWeekStat?.postureScore ?? null),
       };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 오늘의 건강 점수를 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 오늘의 건강 점수를 조회할 수 없습니다.');
     }
   }
 
@@ -68,19 +69,19 @@ export class DashboardService {
     fromStr: string,
   ): Promise<WeeklyDashboardDto> {
     try {
-      const from = this.parseDate(fromStr);
+      const from = parseDate(fromStr);
       if (!from) {
         throw new BadRequestException('from은 YYYY-MM-DD 형식이어야 합니다.');
       }
       if (from.getUTCDay() !== 1) {
         throw new BadRequestException('from은 월요일이어야 합니다.');
       }
-      const to = this.addDays(from, 6);
+      const to = addDays(from, 6);
 
       const stats = await this.prisma.dailyStat.findMany({
         where: { userId, date: { gte: from, lte: to } },
       });
-      const byDate = new Map(stats.map((s) => [this.formatDate(s.date), s]));
+      const byDate = new Map(stats.map((s) => [formatDate(s.date), s]));
 
       const days: WeeklyDayDto[] = [];
       let turtleNeckTotalSec = 0;
@@ -91,8 +92,8 @@ export class DashboardService {
       let weeklyTotalDetectionSec = 0;
 
       for (let i = 0; i < 7; i++) {
-        const d = this.addDays(from, i);
-        const key = this.formatDate(d);
+        const d = addDays(from, i);
+        const key = formatDate(d);
         const s = byDate.get(key);
 
         const totalSec = s?.totalDetectionSec ?? 0;
@@ -118,18 +119,18 @@ export class DashboardService {
       let worstWeekday: Weekday | null = null;
       let worstScore = Number.POSITIVE_INFINITY;
       for (let i = 0; i < 7; i++) {
-        const key = this.formatDate(this.addDays(from, i));
+        const key = formatDate(addDays(from, i));
         const score = byDate.get(key)?.healthScore ?? null;
         if (score == null) continue;
         if (score < worstScore) {
           worstScore = score;
-          worstWeekday = WEEKDAY_VALUES[this.addDays(from, i).getUTCDay()];
+          worstWeekday = WEEKDAY_VALUES[addDays(from, i).getUTCDay()];
         }
       }
 
       return {
         from: fromStr,
-        to: this.formatDate(to),
+        to: formatDate(to),
         days,
         turtleNeckTotalSec,
         roundShoulderTotalSec,
@@ -139,10 +140,7 @@ export class DashboardService {
         worstWeekday,
       };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 주간 대시보드를 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 주간 대시보드를 조회할 수 없습니다.');
     }
   }
 
@@ -151,7 +149,7 @@ export class DashboardService {
     dateStr: string,
   ): Promise<DailyDashboardDto> {
     try {
-      const date = this.parseDate(dateStr);
+      const date = parseDate(dateStr);
       if (!date) {
         throw new BadRequestException('date는 YYYY-MM-DD 형식이어야 합니다.');
       }
@@ -162,7 +160,7 @@ export class DashboardService {
       const slots: SlotEvent[][] = Array.from({ length: 8 }, () => []);
 
       for (const e of events) {
-        const slotIndex = Math.floor(this.seoulHour(e.detectedAt) / 3);
+        const slotIndex = Math.floor(seoulHour(e.detectedAt) / 3);
         const startMs = e.detectedAt.getTime();
         slots[slotIndex].push({ startMs, endMs: startMs + e.durationSec * 1000, type: e.type });
       }
@@ -195,10 +193,7 @@ export class DashboardService {
 
       return { date: dateStr, slots: result };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 일간 대시보드를 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 일간 대시보드를 조회할 수 없습니다.');
     }
   }
 
@@ -207,7 +202,7 @@ export class DashboardService {
     dto: CreateTimelineEntryDto,
   ): Promise<CreateTimelineEntryResponseDto> {
     try {
-      const date = this.parseDate(dto.date);
+      const date = parseDate(dto.date);
       if (!date) {
         throw new BadRequestException('date는 YYYY-MM-DD 형식이어야 합니다.');
       }
@@ -224,10 +219,7 @@ export class DashboardService {
 
       return { accepted: 1 };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 타임라인 항목을 저장할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 타임라인 항목을 저장할 수 없습니다.');
     }
   }
 
@@ -236,7 +228,7 @@ export class DashboardService {
     dateStr: string,
   ): Promise<TimelineDashboardDto> {
     try {
-      const date = this.parseDate(dateStr);
+      const date = parseDate(dateStr);
       if (!date) {
         throw new BadRequestException('date는 YYYY-MM-DD 형식이어야 합니다.');
       }
@@ -255,82 +247,25 @@ export class DashboardService {
 
       return { date: dateStr, buckets };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 타임라인을 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 타임라인을 조회할 수 없습니다.');
     }
   }
-
-  // ---------- helpers ----------
 
   private async fetchSeoulDayEvents(userId: string, date: Date) {
     return this.prisma.detectionEvent.findMany({
       where: {
         userId,
         detectedAt: {
-          gte: this.seoulDayStartUtc(date),
-          lt: this.seoulDayStartUtc(this.addDays(date, 1)),
+          gte: seoulDayStartUtc(date),
+          lt: seoulDayStartUtc(addDays(date, 1)),
         },
       },
       select: { detectedAt: true, durationSec: true, type: true },
     });
   }
 
-  /** "YYYY-MM-DD" → Date(midnight UTC, same calendar date). 잘못된 형식이면 null. */
-  private parseDate(s: string): Date | null {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-    const [y, m, d] = s.split('-').map(Number);
-    const dt = new Date(Date.UTC(y, m - 1, d));
-    if (
-      dt.getUTCFullYear() !== y ||
-      dt.getUTCMonth() !== m - 1 ||
-      dt.getUTCDate() !== d
-    ) {
-      return null;
-    }
-    return dt;
-  }
-
-  /** Date → "YYYY-MM-DD" (UTC date 부분만 사용). DailyStat.date도 동일 표현. */
-  private formatDate(d: Date): string {
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
-
-  private addDays(d: Date, days: number): Date {
-    return new Date(d.getTime() + days * DAY_MS);
-  }
-
-  /** 캘린더 일자(date-only UTC)를 Seoul 자정의 UTC 인스턴트로 변환. */
-  private seoulDayStartUtc(d: Date): Date {
-    return new Date(d.getTime() - SEOUL_OFFSET_MS);
-  }
-
-  private seoulHour(d: Date): number {
-    return new Date(d.getTime() + SEOUL_OFFSET_MS).getUTCHours();
-  }
-
-  private seoulHourMinute(d: Date): { hour: number; minute: number } {
-    const s = new Date(d.getTime() + SEOUL_OFFSET_MS);
-    return { hour: s.getUTCHours(), minute: s.getUTCMinutes() };
-  }
-
   private calcPctChange(current: number | null, prev: number | null): number | null {
     if (current === null || prev === null || prev === 0) return null;
     return Math.round(((current - prev) / prev) * 1000) / 10;
-  }
-
-  private todaySeoulDate(): Date {
-    const seoul = new Date(Date.now() + SEOUL_OFFSET_MS);
-    return new Date(
-      Date.UTC(
-        seoul.getUTCFullYear(),
-        seoul.getUTCMonth(),
-        seoul.getUTCDate(),
-      ),
-    );
   }
 }

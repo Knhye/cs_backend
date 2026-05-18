@@ -120,8 +120,7 @@ export class AuthController {
     @CurrentUser() user: CurrentUserPayload,
     @Req() req: Request,
   ): Promise<void> {
-    const token = req.headers.authorization?.replace('Bearer ', '') ?? '';
-    await this.authService.logout(user.id, token);
+    await this.authService.logout(user.id, this.extractBearerToken(req));
   }
 
   @Delete('withdraw')
@@ -133,7 +132,10 @@ export class AuthController {
     @CurrentUser() user: CurrentUserPayload,
     @Req() req: Request,
   ): Promise<void> {
-    const token = req.headers.authorization?.replace('Bearer ', '') ?? '';
-    await this.authService.withdraw(user.id, token);
+    await this.authService.withdraw(user.id, this.extractBearerToken(req));
+  }
+
+  private extractBearerToken(req: Request): string {
+    return req.headers.authorization?.replace('Bearer ', '') ?? '';
   }
 }

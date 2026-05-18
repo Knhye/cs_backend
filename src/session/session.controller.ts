@@ -31,7 +31,7 @@ import { SessionService } from './session.service.js';
 export class SessionController {
   constructor(private readonly sessionService: SessionService) {}
 
-  @Post('start')
+  @Post()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '감지 세션 시작' })
@@ -58,7 +58,6 @@ export class SessionController {
   }
 
   @Post(':id/events')
-  @HttpCode(200)
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '감지 이벤트 배치 업로드 (최대 100건)' })

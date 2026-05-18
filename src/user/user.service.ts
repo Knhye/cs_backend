@@ -1,8 +1,6 @@
 import {
   BadRequestException,
-  HttpException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -28,6 +26,7 @@ import {
   UserResponseDto,
   UserSettingsDto,
 } from './dto/user-response.dto.js';
+import { rethrowAsInternal } from '../common/utils/error.util.js';
 
 @Injectable()
 export class UserService {
@@ -37,13 +36,14 @@ export class UserService {
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
+        include: { userSettings: true },
       });
 
       if (!user) {
         throw new NotFoundException('유저를 찾을 수 없습니다.');
       }
 
-      const settings = await this.ensureSettings(userId);
+      const settings = user.userSettings ?? await this.ensureSettings(userId);
 
       return {
         id: user.id,
@@ -54,10 +54,7 @@ export class UserService {
         settings: this.toSettingsDto(settings),
       };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 회원 정보를 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 회원 정보를 조회할 수 없습니다.');
     }
   }
 
@@ -81,10 +78,7 @@ export class UserService {
 
       return updated;
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 프로필을 수정할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 프로필을 수정할 수 없습니다.');
     }
   }
 
@@ -119,10 +113,7 @@ export class UserService {
 
       return this.toSettingsDto(updated);
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 설정을 수정할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 설정을 수정할 수 없습니다.');
     }
   }
 
@@ -141,10 +132,7 @@ export class UserService {
 
       return { darkDetectionEnabled: updated.darkDetectionEnabled };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 어둠 감지 설정을 수정할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 어둠 감지 설정을 수정할 수 없습니다.');
     }
   }
 
@@ -188,10 +176,7 @@ export class UserService {
         this.prisma.refreshToken.deleteMany({ where: { userId } }),
       ]);
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 비밀번호를 변경할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 비밀번호를 변경할 수 없습니다.');
     }
   }
 
@@ -238,10 +223,7 @@ export class UserService {
         avatarHoodColor: settings.avatarHoodColor,
       };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 아바타 상태를 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 아바타 상태를 조회할 수 없습니다.');
     }
   }
 

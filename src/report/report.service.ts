@@ -1,9 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
-  HttpException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
@@ -20,9 +18,16 @@ import {
   ResendResponseDto,
   TopIssueDto,
 } from './dto/report-response.dto.js';
-
-const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+import {
+  addDays,
+  currentSeoulWeekRange,
+  formatDate,
+  parseDate,
+  seoulDayStartUtc,
+  seoulHourMinute,
+  toSeoulDate,
+} from '../common/utils/date.util.js';
+import { rethrowAsInternal } from '../common/utils/error.util.js';
 
 @Injectable()
 export class ReportService {
@@ -34,8 +39,8 @@ export class ReportService {
   ): Promise<ReportHistoryResponseDto> {
     try {
       const weekStartDateFilter: { gte?: Date; lte?: Date } = {};
-      if (query.from) weekStartDateFilter.gte = this.parseDate(query.from);
-      if (query.to) weekStartDateFilter.lte = this.parseDate(query.to);
+      if (query.from) weekStartDateFilter.gte = parseDate(query.from) ?? undefined;
+      if (query.to) weekStartDateFilter.lte = parseDate(query.to) ?? undefined;
 
       const reports = await this.prisma.weeklyReport.findMany({
         where: {
@@ -57,8 +62,8 @@ export class ReportService {
 
       const items: ReportHistoryItemDto[] = reports.map((r) => ({
         id: r.id,
-        weekStartDate: this.formatDate(r.weekStartDate),
-        weekEndDate: this.formatDate(r.weekEndDate),
+        weekStartDate: formatDate(r.weekStartDate),
+        weekEndDate: formatDate(r.weekEndDate),
         deliveryWay: r.deliveryWay,
         status: r.status,
         sentAt: r.sentAt,
@@ -66,10 +71,7 @@ export class ReportService {
 
       return { items };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 리포트 이력을 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 리포트 이력을 조회할 수 없습니다.');
     }
   }
 
@@ -94,10 +96,7 @@ export class ReportService {
         status: report.status,
       };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 리포트를 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 리포트를 조회할 수 없습니다.');
     }
   }
 
@@ -121,17 +120,16 @@ export class ReportService {
 
       return { id, status: ReportStatus.PENDING };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 리포트 재발송에 실패했습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 리포트 재발송에 실패했습니다.');
     }
   }
 
   /** 매주 월요일 00:00 KST (= 일요일 15:00 UTC) — 전주 리포트 생성 및 발송 */
   @Cron('0 15 * * 0')
   async generateWeeklyReports(): Promise<void> {
-    const { weekStart, weekEnd } = this.prevWeekRange();
+    const { weekStart: currentWeekStart } = currentSeoulWeekRange();
+    const weekStart = addDays(currentWeekStart, -7);
+    const weekEnd = addDays(weekStart, 6);
 
     const users = await this.prisma.user.findMany({
       where: { userSettings: { reportPushEnabled: true } },
@@ -203,7 +201,7 @@ export class ReportService {
     weekStart: Date,
     weekEnd: Date,
   ): Promise<CurrentReportResponseDto> {
-    const weekEndExclusive = this.addDays(weekEnd, 1);
+    const weekEndExclusive = addDays(weekEnd, 1);
 
     const [dailyStats, sessions, events] = await Promise.all([
       this.prisma.dailyStat.findMany({
@@ -214,8 +212,8 @@ export class ReportService {
         where: {
           userId,
           startedAt: {
-            gte: this.seoulDayStartUtc(weekStart),
-            lt: this.seoulDayStartUtc(weekEndExclusive),
+            gte: seoulDayStartUtc(weekStart),
+            lt: seoulDayStartUtc(weekEndExclusive),
           },
           endedAt: { not: null },
         },
@@ -225,8 +223,8 @@ export class ReportService {
         where: {
           userId,
           detectedAt: {
-            gte: this.seoulDayStartUtc(weekStart),
-            lt: this.seoulDayStartUtc(weekEndExclusive),
+            gte: seoulDayStartUtc(weekStart),
+            lt: seoulDayStartUtc(weekEndExclusive),
           },
         },
         select: { type: true, durationSec: true, detectedAt: true },
@@ -255,12 +253,12 @@ export class ReportService {
 
     // ─── health score ───────────────────────────────────────────────────────
     const dailyScoreMap = new Map(
-      dailyStats.map((s) => [this.formatDate(s.date), s.healthScore]),
+      dailyStats.map((s) => [formatDate(s.date), s.healthScore]),
     );
     const daily: (number | null)[] = [];
     for (let i = 0; i < 7; i++) {
-      const d = this.addDays(weekStart, i);
-      daily.push(dailyScoreMap.get(this.formatDate(d)) ?? null);
+      const d = addDays(weekStart, i);
+      daily.push(dailyScoreMap.get(formatDate(d)) ?? null);
     }
     const validScores = daily.filter((s): s is number => s !== null);
     const weeklyScore =
@@ -298,8 +296,8 @@ export class ReportService {
     const bucketMap = new Map<string, BucketData>();
 
     for (const e of events) {
-      const { hour, minute } = this.seoulHourMinute(e.detectedAt);
-      const dateStr = this.formatDate(this.toSeoulDate(e.detectedAt));
+      const { hour, minute } = seoulHourMinute(e.detectedAt);
+      const dateStr = formatDate(toSeoulDate(e.detectedAt));
       const startMin = minute >= 30 ? 30 : 0;
       const key = `${dateStr}|${hour}|${startMin}`;
       const b = bucketMap.get(key) ?? {
@@ -363,8 +361,8 @@ export class ReportService {
     const aiSolution = this.generateAiSolution(topIssueType);
 
     return {
-      weekStartDate: this.formatDate(weekStart),
-      weekEndDate: this.formatDate(weekEnd),
+      weekStartDate: formatDate(weekStart),
+      weekEndDate: formatDate(weekEnd),
       session,
       healthScore: { weekly: weeklyScore, daily },
       timeline,
@@ -386,58 +384,5 @@ export class ReportService {
       default:
         return '이번 주 자세 상태를 분석했어요. 규칙적인 휴식과 스트레칭으로 건강한 자세를 유지해보세요.';
     }
-  }
-
-  // ─── helpers ───────────────────────────────────────────────────────────────
-
-  private currentWeekRange(): { weekStart: Date; weekEnd: Date } {
-    const seoul = new Date(Date.now() + SEOUL_OFFSET_MS);
-    const dow = seoul.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const daysFromMonday = dow === 0 ? 6 : dow - 1;
-    const weekStart = new Date(
-      Date.UTC(
-        seoul.getUTCFullYear(),
-        seoul.getUTCMonth(),
-        seoul.getUTCDate() - daysFromMonday,
-      ),
-    );
-    return { weekStart, weekEnd: this.addDays(weekStart, 6) };
-  }
-
-  private prevWeekRange(): { weekStart: Date; weekEnd: Date } {
-    const { weekStart } = this.currentWeekRange();
-    const prevStart = this.addDays(weekStart, -7);
-    return { weekStart: prevStart, weekEnd: this.addDays(prevStart, 6) };
-  }
-
-  private parseDate(s: string): Date {
-    const [y, m, d] = s.split('-').map(Number);
-    return new Date(Date.UTC(y, m - 1, d));
-  }
-
-  private formatDate(d: Date): string {
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
-
-  private addDays(d: Date, days: number): Date {
-    return new Date(d.getTime() + days * DAY_MS);
-  }
-
-  /** date-only UTC midnight → KST 자정의 UTC 인스턴트 */
-  private seoulDayStartUtc(d: Date): Date {
-    return new Date(d.getTime() - SEOUL_OFFSET_MS);
-  }
-
-  private seoulHourMinute(d: Date): { hour: number; minute: number } {
-    const s = new Date(d.getTime() + SEOUL_OFFSET_MS);
-    return { hour: s.getUTCHours(), minute: s.getUTCMinutes() };
-  }
-
-  private toSeoulDate(d: Date): Date {
-    const s = new Date(d.getTime() + SEOUL_OFFSET_MS);
-    return new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate()));
   }
 }

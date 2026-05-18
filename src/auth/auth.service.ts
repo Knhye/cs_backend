@@ -1,8 +1,6 @@
 import {
   ConflictException,
-  HttpException,
   Injectable,
-  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,6 +13,7 @@ import { TokenResponseDto } from './dto/token-response.dto.js';
 import { TokenBlacklistService } from './token-blacklist.service.js';
 import { EmailVerificationService } from './email-verification.service.js';
 import { GoogleProfile } from './strategies/google.strategy.js';
+import { rethrowAsInternal } from '../common/utils/error.util.js';
 
 @Injectable()
 export class AuthService {
@@ -53,8 +52,7 @@ export class AuthService {
 
       return this.generateTokens(user.id, user.email, user.name);
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException('서버 오류: 회원가입을 처리할 수 없습니다.');
+      rethrowAsInternal(e, '서버 오류: 회원가입을 처리할 수 없습니다.');
     }
   }
 
@@ -84,8 +82,7 @@ export class AuthService {
 
       return this.generateTokens(user.id, user.email, user.name);
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException('서버 오류: 로그인을 처리할 수 없습니다.');
+      rethrowAsInternal(e, '서버 오류: 로그인을 처리할 수 없습니다.');
     }
   }
 
@@ -115,8 +112,7 @@ export class AuthService {
 
       return this.generateTokens(user.id, user.email, user.name);
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException('서버 오류: 구글 로그인을 처리할 수 없습니다.');
+      rethrowAsInternal(e, '서버 오류: 구글 로그인을 처리할 수 없습니다.');
     }
   }
 
@@ -142,8 +138,7 @@ export class AuthService {
         stored.user.name,
       );
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException('서버 오류: 토큰 갱신을 처리할 수 없습니다.');
+      rethrowAsInternal(e, '서버 오류: 토큰 갱신을 처리할 수 없습니다.');
     }
   }
 
@@ -155,8 +150,7 @@ export class AuthService {
         where: { userId },
       });
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException('서버 오류: 로그아웃을 처리할 수 없습니다.');
+      rethrowAsInternal(e, '서버 오류: 로그아웃을 처리할 수 없습니다.');
     }
   }
 
@@ -169,8 +163,7 @@ export class AuthService {
         where: { id: userId },
       });
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException('서버 오류: 회원 탈퇴를 처리할 수 없습니다.');
+      rethrowAsInternal(e, '서버 오류: 회원 탈퇴를 처리할 수 없습니다.');
     }
   }
 

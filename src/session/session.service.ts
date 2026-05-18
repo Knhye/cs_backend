@@ -1,9 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
-  HttpException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { DetectionType, Prisma } from '@prisma/client';
@@ -12,13 +10,14 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { EndSessionDto } from './dto/end-session.dto.js';
 import {
   CurrentSessionResponseDto,
-  NewBadgeDto,
   SessionEndResponseDto,
   SessionStartResponseDto,
   UploadEventsResponseDto,
 } from './dto/session-response.dto.js';
 import { StartSessionDto } from './dto/start-session.dto.js';
 import { UploadEventsDto } from './dto/upload-events.dto.js';
+import { toSeoulDate } from '../common/utils/date.util.js';
+import { rethrowAsInternal } from '../common/utils/error.util.js';
 
 interface AggregateBuckets {
   goodPostureSec: number;
@@ -61,10 +60,7 @@ export class SessionService {
 
       return { sessionId: session.id, startedAt: session.startedAt };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 세션을 시작할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 세션을 시작할 수 없습니다.');
     }
   }
 
@@ -74,15 +70,7 @@ export class SessionService {
     dto: EndSessionDto,
   ): Promise<SessionEndResponseDto> {
     try {
-      const session = await this.prisma.detectionSession.findUnique({
-        where: { id: sessionId },
-      });
-      if (!session) {
-        throw new NotFoundException('세션을 찾을 수 없습니다.');
-      }
-      if (session.userId !== userId) {
-        throw new ForbiddenException('해당 세션에 접근할 수 없습니다.');
-      }
+      const session = await this.findSessionForUser(userId, sessionId);
       if (session.endedAt) {
         throw new ConflictException('이미 종료된 세션입니다.');
       }
@@ -99,7 +87,7 @@ export class SessionService {
         totalDurationSec,
       );
 
-      const seoulDate = this.toSeoulDate(endedAt);
+      const seoulDate = toSeoulDate(endedAt);
       const shoulderIssueSec =
         buckets.roundShoulderSec + buckets.shoulderAsymmetrySec;
       const shoulderIssueCount =
@@ -177,10 +165,7 @@ export class SessionService {
         newBadges,
       };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 세션을 종료할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 세션을 종료할 수 없습니다.');
     }
   }
 
@@ -190,15 +175,7 @@ export class SessionService {
     dto: UploadEventsDto,
   ): Promise<UploadEventsResponseDto> {
     try {
-      const session = await this.prisma.detectionSession.findUnique({
-        where: { id: sessionId },
-      });
-      if (!session) {
-        throw new NotFoundException('세션을 찾을 수 없습니다.');
-      }
-      if (session.userId !== userId) {
-        throw new ForbiddenException('해당 세션에 접근할 수 없습니다.');
-      }
+      const session = await this.findSessionForUser(userId, sessionId);
       if (session.endedAt) {
         throw new ConflictException(
           '종료된 세션에는 이벤트를 추가할 수 없습니다.',
@@ -220,10 +197,7 @@ export class SessionService {
 
       return { accepted: result.count };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 이벤트를 저장할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 이벤트를 저장할 수 없습니다.');
     }
   }
 
@@ -236,11 +210,18 @@ export class SessionService {
       if (!session) return null;
       return { sessionId: session.id, startedAt: session.startedAt };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 세션 정보를 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 세션 정보를 조회할 수 없습니다.');
     }
+  }
+
+  private async findSessionForUser(userId: string, sessionId: string) {
+    const session = await this.prisma.detectionSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session) throw new NotFoundException('세션을 찾을 수 없습니다.');
+    if (session.userId !== userId)
+      throw new ForbiddenException('해당 세션에 접근할 수 없습니다.');
+    return session;
   }
 
   private async aggregateBySession(
@@ -349,12 +330,5 @@ export class SessionService {
       where: { userId_date: { userId, date } },
       data: { healthScore, postureScore, warningCount },
     });
-  }
-
-  private toSeoulDate(date: Date): Date {
-    const seoul = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-    return new Date(
-      Date.UTC(seoul.getUTCFullYear(), seoul.getUTCMonth(), seoul.getUTCDate()),
-    );
   }
 }

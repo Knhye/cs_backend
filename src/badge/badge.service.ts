@@ -1,8 +1,4 @@
-import {
-  HttpException,
-  Injectable,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { BadgeCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NewBadgeDto } from '../session/dto/session-response.dto.js';
@@ -12,9 +8,8 @@ import {
   NextBadgeDto,
 } from './dto/badge-progress-response.dto.js';
 import { BadgeDto, MyBadgeDto } from './dto/badge-response.dto.js';
-
-const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { DAY_MS, todaySeoulDate } from '../common/utils/date.util.js';
+import { rethrowAsInternal } from '../common/utils/error.util.js';
 
 @Injectable()
 export class BadgeService {
@@ -35,10 +30,7 @@ export class BadgeService {
         requirementValue: b.requirementValue,
       }));
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 배지 목록을 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 배지 목록을 조회할 수 없습니다.');
     }
   }
 
@@ -57,10 +49,7 @@ export class BadgeService {
         iconUrl: ub.badge.iconUrl,
       }));
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 내 배지를 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 내 배지를 조회할 수 없습니다.');
     }
   }
 
@@ -127,10 +116,7 @@ export class BadgeService {
 
       return { categories };
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 배지 진행도를 조회할 수 없습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 배지 진행도를 조회할 수 없습니다.');
     }
   }
 
@@ -186,10 +172,7 @@ export class BadgeService {
 
       return toAward.map((b) => ({ code: b.code, name: b.name }));
     } catch (e) {
-      if (e instanceof HttpException) throw e;
-      throw new InternalServerErrorException(
-        '서버 오류: 배지 부여에 실패했습니다.',
-      );
+      rethrowAsInternal(e, '서버 오류: 배지 부여에 실패했습니다.');
     }
   }
 
@@ -216,10 +199,7 @@ export class BadgeService {
 
     if (stats.length === 0) return 0;
 
-    const now = new Date(Date.now() + SEOUL_OFFSET_MS);
-    const today = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-    );
+    const today = todaySeoulDate();
     const yesterday = new Date(today.getTime() - DAY_MS);
 
     const mostRecentTime = stats[0].date.getTime();
