@@ -1,10 +1,8 @@
 import {
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { DeliveryWay, DetectionType, ReportStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ReportHistoryQueryDto } from './dto/report-query.dto.js';
@@ -15,9 +13,14 @@ import {
   ReportHistoryResponseDto,
   ReportSessionDto,
   ReportTimelineItemDto,
-  ResendResponseDto,
   TopIssueDto,
 } from './dto/report-response.dto.js';
+import {
+  SaveReportDto,
+  SaveReportResponseDto,
+  WeeklyBatchItemDto,
+  WeeklyBatchStatsDto,
+} from './dto/internal-report.dto.js';
 import {
   addDays,
   currentSeoulWeekRange,
@@ -107,99 +110,98 @@ export class ReportService {
     }
   }
 
-  async resendReport(userId: string, id: string): Promise<ResendResponseDto> {
+  async getWeeklyBatch(): Promise<WeeklyBatchItemDto[]> {
     try {
-      const report = await this.prisma.weeklyReport.findUnique({
-        where: { id },
-      });
-      if (!report) throw new NotFoundException('리포트를 찾을 수 없습니다.');
-      if (report.userId !== userId)
-        throw new ForbiddenException('접근 권한이 없습니다.');
-      if (report.status === ReportStatus.SENT)
-        throw new ConflictException('이미 발송된 리포트입니다.');
+      const { weekStart: currentWeekStart } = currentSeoulWeekRange();
+      const weekStart = addDays(currentWeekStart, -7);
+      const weekEnd = addDays(weekStart, 6);
 
-      await this.prisma.weeklyReport.update({
-        where: { id },
-        data: { status: ReportStatus.PENDING, errorMessage: null },
+      const users = await this.prisma.user.findMany({
+        where: { userSettings: { reportPushEnabled: true } },
+        include: { userSettings: true },
       });
 
-      this.deliverReport(id).catch(() => {});
+      const results: WeeklyBatchItemDto[] = [];
 
-      return { id, status: ReportStatus.PENDING };
-    } catch (e) {
-      rethrowAsInternal(e, '서버 오류: 리포트 재발송에 실패했습니다.');
-    }
-  }
+      for (const user of users) {
+        if (!user.userSettings) continue;
+        const deliveryWay =
+          user.userSettings.reportPushWay === 'EMAIL'
+            ? DeliveryWay.EMAIL
+            : DeliveryWay.NOTION;
 
-  /** 매주 월요일 00:00 KST (= 일요일 15:00 UTC) — 전주 리포트 생성 및 발송 */
-  @Cron('0 15 * * 0')
-  async generateWeeklyReports(): Promise<void> {
-    const { weekStart: currentWeekStart } = currentSeoulWeekRange();
-    const weekStart = addDays(currentWeekStart, -7);
-    const weekEnd = addDays(weekStart, 6);
-
-    const users = await this.prisma.user.findMany({
-      where: { userSettings: { reportPushEnabled: true } },
-      include: { userSettings: true },
-    });
-
-    for (const user of users) {
-      if (!user.userSettings) continue;
-      const deliveryWay =
-        user.userSettings.reportPushWay === 'EMAIL'
-          ? DeliveryWay.EMAIL
-          : DeliveryWay.NOTION;
-
-      try {
-        const payload = await this.buildPayload(user.id, weekStart, weekEnd);
-
-        const report = await this.prisma.weeklyReport.upsert({
-          where: {
-            userId_weekStartDate_deliveryWay: {
-              userId: user.id,
-              weekStartDate: weekStart,
-              deliveryWay,
-            },
-          },
-          update: {
-            status: ReportStatus.PENDING,
-            payload: payload as object,
-            errorMessage: null,
-          },
-          create: {
+        try {
+          const stats = await this.buildPayload(user.id, weekStart, weekEnd);
+          results.push({
             userId: user.id,
-            weekStartDate: weekStart,
-            weekEndDate: weekEnd,
+            email: user.email,
+            name: user.name,
             deliveryWay,
-            status: ReportStatus.PENDING,
-            payload: payload as object,
-          },
-        });
-
-        await this.deliverReport(report.id);
-      } catch {
-        // 개별 유저 실패가 전체 스케줄을 중단하지 않도록 흡수
+            stats,
+          });
+        } catch {
+          // 개별 유저 실패가 전체 배치를 중단하지 않도록 흡수
+        }
       }
+
+      return results;
+    } catch (e) {
+      rethrowAsInternal(e, '서버 오류: 주간 배치 데이터를 조회할 수 없습니다.');
     }
   }
 
-  private async deliverReport(reportId: string): Promise<void> {
+  async saveReport(dto: SaveReportDto): Promise<SaveReportResponseDto> {
     try {
-      // TODO: deliveryWay(EMAIL/NOTION)에 따른 실제 발송 로직 구현
+      const weekStart = parseDate(dto.weekStartDate);
+      const weekEnd = parseDate(dto.weekEndDate);
+      if (!weekStart || !weekEnd) {
+        throw new Error('weekStartDate 또는 weekEndDate 형식이 올바르지 않습니다.');
+      }
+
+      const topIssueType = dto.stats.topIssues?.[0]?.type ?? null;
+      const payload = { ...dto.stats, aiSolution: dto.aiSolution } as object;
+
+      const report = await this.prisma.weeklyReport.upsert({
+        where: {
+          userId_weekStartDate_deliveryWay: {
+            userId: dto.userId,
+            weekStartDate: weekStart,
+            deliveryWay: dto.deliveryWay,
+          },
+        },
+        update: {
+          status: ReportStatus.PENDING,
+          payload,
+          aiSolution: dto.aiSolution,
+          topIssueType: topIssueType as DetectionType | null,
+          errorMessage: null,
+        },
+        create: {
+          userId: dto.userId,
+          weekStartDate: weekStart,
+          weekEndDate: weekEnd,
+          deliveryWay: dto.deliveryWay,
+          status: ReportStatus.PENDING,
+          payload,
+          aiSolution: dto.aiSolution,
+          topIssueType: topIssueType as DetectionType | null,
+        },
+      });
+
+      return { reportId: report.id };
+    } catch (e) {
+      rethrowAsInternal(e, '서버 오류: 리포트를 저장할 수 없습니다.');
+    }
+  }
+
+  async markReportSent(reportId: string): Promise<void> {
+    try {
       await this.prisma.weeklyReport.update({
         where: { id: reportId },
         data: { status: ReportStatus.SENT, sentAt: new Date() },
       });
     } catch (e) {
-      await this.prisma.weeklyReport
-        .update({
-          where: { id: reportId },
-          data: {
-            status: ReportStatus.FAILED,
-            errorMessage: e instanceof Error ? e.message : '알 수 없는 오류',
-          },
-        })
-        .catch(() => {});
+      rethrowAsInternal(e, '서버 오류: 리포트 발송 완료 처리에 실패했습니다.');
     }
   }
 
@@ -207,7 +209,7 @@ export class ReportService {
     userId: string,
     weekStart: Date,
     weekEnd: Date,
-  ): Promise<CurrentReportResponseDto> {
+  ): Promise<WeeklyBatchStatsDto> {
     const weekEndExclusive = addDays(weekEnd, 1);
 
     const [dailyStats, sessions, events] = await Promise.all([
@@ -345,9 +347,6 @@ export class ReportService {
         return a.startMin - b.startMin;
       });
 
-    const topIssueType = (topIssues[0]?.type as DetectionType | undefined) ?? null;
-    const aiSolution = this.generateAiSolution(topIssueType);
-
     return {
       weekStartDate: formatDate(weekStart),
       weekEndDate: formatDate(weekEnd),
@@ -355,7 +354,6 @@ export class ReportService {
       healthScore: { weekly: weeklyScore, daily },
       timeline,
       topIssues,
-      aiSolution,
     };
   }
 
@@ -373,20 +371,5 @@ export class ReportService {
       if (!max) return s.endedAt;
       return s.endedAt > max ? s.endedAt : max;
     }, null);
-  }
-
-  private generateAiSolution(topIssueType: DetectionType | null): string {
-    switch (topIssueType) {
-      case DetectionType.TURTLE_NECK:
-        return '거북목이 가장 빈번하게 나타났어요. 모니터 상단을 눈높이에 맞추고, 1시간마다 목 스트레칭을 해보세요.';
-      case DetectionType.ROUND_SHOULDER:
-        return '어깨 말림이 자주 감지되었어요. 어깨를 뒤로 젖히는 스트레칭과 가슴 근육 이완 운동을 추천합니다.';
-      case DetectionType.SHOULDER_ASYMMETRY:
-        return '어깨 비대칭이 반복해서 감지되었어요. 균형 잡힌 자세를 위해 양쪽 어깨 높이를 의식적으로 맞춰보세요.';
-      case DetectionType.DARK_ENV:
-        return '어두운 환경에서 장시간 화면을 보셨어요. 화면 밝기를 주변 환경에 맞게 조정하고, 블루라이트 필터 사용을 권장합니다.';
-      default:
-        return '이번 주 자세 상태를 분석했어요. 규칙적인 휴식과 스트레칭으로 건강한 자세를 유지해보세요.';
-    }
   }
 }

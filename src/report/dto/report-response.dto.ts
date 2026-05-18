@@ -130,10 +130,3 @@ export class ReportDetailResponseDto extends CurrentReportResponseDto {
   status!: string;
 }
 
-export class ResendResponseDto {
-  @ApiProperty({ description: '리포트 ID' })
-  id!: string;
-
-  @ApiProperty({ description: '변경된 발송 상태', example: 'PENDING' })
-  status!: string;
-}

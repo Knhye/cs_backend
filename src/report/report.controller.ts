@@ -1,10 +1,7 @@
 import {
-  Body,
   Controller,
   Get,
-  HttpCode,
   Param,
-  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -19,7 +16,6 @@ import { ReportHistoryQueryDto } from './dto/report-query.dto.js';
 import {
   ReportDetailResponseDto,
   ReportHistoryResponseDto,
-  ResendResponseDto,
 } from './dto/report-response.dto.js';
 import { ReportService } from './report.service.js';
 
@@ -61,21 +57,5 @@ export class ReportController {
     return this.reportService.getReportById(user.id, id);
   }
 
-  @Post(':id/resend')
-  @HttpCode(200)
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: '리포트 재발송 (FR-06-01)',
-    description:
-      '실패/미발송 리포트를 user_settings.report_push_way로 재발송 큐에 등록합니다. 이미 SENT 상태이면 409.',
-  })
-  @ApiParam({ name: 'id', description: '리포트 ID' })
-  @ApiCommonResponse({ type: ResendResponseDto })
-  async resendReport(
-    @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
-  ): Promise<ResendResponseDto> {
-    return this.reportService.resendReport(user.id, id);
-  }
+
 }
