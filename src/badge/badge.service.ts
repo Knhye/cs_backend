@@ -79,39 +79,21 @@ export class BadgeService {
       const categories: BadgeCategoryProgressDto[] = [];
 
       const postureNext = allBadges.find(
-        (b) =>
-          b.category === BadgeCategory.POSTURE_TIME && !earnedIds.has(b.id),
+        (b) => b.category === BadgeCategory.POSTURE_TIME && !earnedIds.has(b.id),
       );
-      const postureNextDto: NextBadgeDto | null = postureNext
-        ? {
-            code: postureNext.code,
-            requirementValue: postureNext.requirementValue,
-            remaining: Math.max(
-              0,
-              postureNext.requirementValue - currentPostureSec,
-            ),
-          }
-        : null;
       categories.push({
-        category: 'POSTURE_TIME',
+        category: BadgeCategory.POSTURE_TIME,
         current: currentPostureSec,
-        next: postureNextDto,
+        next: this.buildNextBadgeDto(postureNext, currentPostureSec),
       });
 
       const streakNext = allBadges.find(
         (b) => b.category === BadgeCategory.STREAK && !earnedIds.has(b.id),
       );
-      const streakNextDto: NextBadgeDto | null = streakNext
-        ? {
-            code: streakNext.code,
-            requirementValue: streakNext.requirementValue,
-            remaining: Math.max(0, streakNext.requirementValue - currentStreak),
-          }
-        : null;
       categories.push({
-        category: 'STREAK',
+        category: BadgeCategory.STREAK,
         current: currentStreak,
-        next: streakNextDto,
+        next: this.buildNextBadgeDto(streakNext, currentStreak),
       });
 
       return { categories };
@@ -176,6 +158,18 @@ export class BadgeService {
     }
   }
 
+  private buildNextBadgeDto(
+    badge: { code: string; requirementValue: number } | undefined,
+    current: number,
+  ): NextBadgeDto | null {
+    if (!badge) return null;
+    return {
+      code: badge.code,
+      requirementValue: badge.requirementValue,
+      remaining: Math.max(0, badge.requirementValue - current),
+    };
+  }
+
   private async checkSpecialBadge(
     userId: string,
     code: string,
@@ -211,12 +205,12 @@ export class BadgeService {
     }
 
     let streak = 0;
-    let expected = new Date(mostRecentTime);
+    let expectedDate = new Date(mostRecentTime);
 
     for (const stat of stats) {
-      if (stat.date.getTime() === expected.getTime()) {
+      if (stat.date.getTime() === expectedDate.getTime()) {
         streak++;
-        expected = new Date(expected.getTime() - DAY_MS);
+        expectedDate = new Date(expectedDate.getTime() - DAY_MS);
       } else {
         break;
       }

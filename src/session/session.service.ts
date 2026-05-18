@@ -19,6 +19,13 @@ import { UploadEventsDto } from './dto/upload-events.dto.js';
 import { toSeoulDate } from '../common/utils/date.util.js';
 import { rethrowAsInternal } from '../common/utils/error.util.js';
 
+const POSTURE_SCORE_WEIGHTS = {
+  turtleNeck: 30,
+  roundShoulder: 30,
+  shoulderAsymmetry: 30,
+  darkEnv: 10,
+} as const;
+
 interface AggregateBuckets {
   goodPostureSec: number;
   goodPostureCount: number;
@@ -296,13 +303,13 @@ export class SessionService {
     totalDetectionSec: number;
   }): number | null {
     if (stat.totalDetectionSec <= 0) return null;
-    const t = stat.totalDetectionSec;
+    const total = stat.totalDetectionSec;
     const score =
       100 -
-      (stat.turtleNeckSec / t) * 30 -
-      (stat.roundShoulderSec / t) * 30 -
-      (stat.shoulderAsymmetrySec / t) * 30 -
-      (stat.darkEnvSec / t) * 10;
+      (stat.turtleNeckSec / total) * POSTURE_SCORE_WEIGHTS.turtleNeck -
+      (stat.roundShoulderSec / total) * POSTURE_SCORE_WEIGHTS.roundShoulder -
+      (stat.shoulderAsymmetrySec / total) * POSTURE_SCORE_WEIGHTS.shoulderAsymmetry -
+      (stat.darkEnvSec / total) * POSTURE_SCORE_WEIGHTS.darkEnv;
     return Math.max(0, Math.round(score));
   }
 

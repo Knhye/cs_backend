@@ -29,6 +29,13 @@ import {
 } from '../common/utils/date.util.js';
 import { rethrowAsInternal } from '../common/utils/error.util.js';
 
+type TimelineBucketData = {
+  good: number;
+  turtleNeck: number;
+  shoulder: number;
+  dark: number;
+};
+
 @Injectable()
 export class ReportService {
   constructor(private readonly prisma: PrismaService) {}
@@ -233,21 +240,8 @@ export class ReportService {
 
     // ─── session ───────────────────────────────────────────────────────────
     const session: ReportSessionDto = {
-      firstStartedAt:
-        sessions.length > 0
-          ? sessions.reduce(
-              (m, s) => (s.startedAt < m ? s.startedAt : m),
-              sessions[0].startedAt,
-            )
-          : null,
-      lastEndedAt:
-        sessions.length > 0
-          ? sessions.reduce<Date | null>((m, s) => {
-              if (!s.endedAt) return m;
-              if (!m) return s.endedAt;
-              return s.endedAt > m ? s.endedAt : m;
-            }, null)
-          : null,
+      firstStartedAt: this.getFirstStartedAt(sessions),
+      lastEndedAt: this.getLastEndedAt(sessions),
       totalDetectionSec: sessions.reduce((sum, s) => sum + s.totalDurationSec, 0),
     };
 
@@ -287,13 +281,7 @@ export class ReportService {
       }));
 
     // ─── timeline (30분 버킷, 데이터 있는 것만) ──────────────────────────────
-    type BucketData = {
-      good: number;
-      turtleNeck: number;
-      shoulder: number;
-      dark: number;
-    };
-    const bucketMap = new Map<string, BucketData>();
+    const bucketMap = new Map<string, TimelineBucketData>();
 
     for (const e of events) {
       const { hour, minute } = seoulHourMinute(e.detectedAt);
@@ -369,6 +357,22 @@ export class ReportService {
       topIssues,
       aiSolution,
     };
+  }
+
+  private getFirstStartedAt(sessions: { startedAt: Date }[]): Date | null {
+    if (sessions.length === 0) return null;
+    return sessions.reduce(
+      (min, s) => (s.startedAt < min ? s.startedAt : min),
+      sessions[0].startedAt,
+    );
+  }
+
+  private getLastEndedAt(sessions: { endedAt: Date | null }[]): Date | null {
+    return sessions.reduce<Date | null>((max, s) => {
+      if (!s.endedAt) return max;
+      if (!max) return s.endedAt;
+      return s.endedAt > max ? s.endedAt : max;
+    }, null);
   }
 
   private generateAiSolution(topIssueType: DetectionType | null): string {
