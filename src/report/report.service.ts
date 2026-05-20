@@ -49,7 +49,8 @@ export class ReportService {
   ): Promise<ReportHistoryResponseDto> {
     try {
       const weekStartDateFilter: { gte?: Date; lte?: Date } = {};
-      if (query.from) weekStartDateFilter.gte = parseDate(query.from) ?? undefined;
+      if (query.from)
+        weekStartDateFilter.gte = parseDate(query.from) ?? undefined;
       if (query.to) weekStartDateFilter.lte = parseDate(query.to) ?? undefined;
 
       const reports = await this.prisma.weeklyReport.findMany({
@@ -155,7 +156,9 @@ export class ReportService {
       const weekStart = parseDate(dto.weekStartDate);
       const weekEnd = parseDate(dto.weekEndDate);
       if (!weekStart || !weekEnd) {
-        throw new Error('weekStartDate 또는 weekEndDate 형식이 올바르지 않습니다.');
+        throw new Error(
+          'weekStartDate 또는 weekEndDate 형식이 올바르지 않습니다.',
+        );
       }
 
       const topIssueType = dto.stats.topIssues?.[0]?.type ?? null;
@@ -244,7 +247,10 @@ export class ReportService {
     const session: ReportSessionDto = {
       firstStartedAt: this.getFirstStartedAt(sessions),
       lastEndedAt: this.getLastEndedAt(sessions),
-      totalDetectionSec: sessions.reduce((sum, s) => sum + s.totalDurationSec, 0),
+      totalDetectionSec: sessions.reduce(
+        (sum, s) => sum + s.totalDurationSec,
+        0,
+      ),
     };
 
     // ─── health score ───────────────────────────────────────────────────────
@@ -259,7 +265,9 @@ export class ReportService {
     const validScores = daily.filter((s): s is number => s !== null);
     const weeklyScore =
       validScores.length > 0
-        ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length)
+        ? Math.round(
+            validScores.reduce((a, b) => a + b, 0) / validScores.length,
+          )
         : null;
 
     // ─── top issues ─────────────────────────────────────────────────────────

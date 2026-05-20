@@ -1,7 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-
-export const TIMELINE_STATES = ['GOOD', 'WARN', 'BAD'] as const;
-export type TimelineDominantState = (typeof TIMELINE_STATES)[number];
+import { POSTURE_STATES, PostureState } from '../../common/enums/posture-state.enum.js';
 
 export class TimelineBucketDto {
   @ApiProperty({ description: '구간 시작 시각 (HH:mm)', example: '09:00' })
@@ -9,10 +7,10 @@ export class TimelineBucketDto {
 
   @ApiProperty({
     description: '해당 구간의 우세 상태. 데이터 없으면 null',
-    enum: TIMELINE_STATES,
+    enum: POSTURE_STATES,
     nullable: true,
   })
-  dominantState!: TimelineDominantState | null;
+  dominantState!: PostureState | null;
 
   @ApiProperty({ description: '메시지 (기본값: 빈 문자열)', example: '' })
   message!: string;

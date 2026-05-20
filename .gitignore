@@ -85,3 +85,7 @@ Desktop.ini
 *~
 
 /docs/**
+tf-config/.terraform/
+tf-config/terraform.tfstate
+tf-config/terraform.tfstate.backup
+tf-config/*.tfvars
