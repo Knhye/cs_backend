@@ -17,9 +17,8 @@ import {
   TimelineDashboardDto,
 } from './dto/timeline-response.dto.js';
 import { TodayHealthScoreDto } from './dto/today-response.dto.js';
+import { WEEKDAY_VALUES, Weekday } from '../common/enums/weekday.enum.js';
 import {
-  WEEKDAY_VALUES,
-  Weekday,
   WeeklyDashboardDto,
   WeeklyDayDto,
 } from './dto/weekly-response.dto.js';

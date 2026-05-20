@@ -1,15 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-
-export const WEEKDAY_VALUES = [
-  'SUN',
-  'MON',
-  'TUE',
-  'WED',
-  'THU',
-  'FRI',
-  'SAT',
-] as const;
-export type Weekday = (typeof WEEKDAY_VALUES)[number];
+import { WEEKDAY_VALUES, Weekday } from '../../common/enums/weekday.enum.js';
 
 export class WeeklyDayDto {
   @ApiProperty({ description: '일자(YYYY-MM-DD)', example: '2026-04-06' })

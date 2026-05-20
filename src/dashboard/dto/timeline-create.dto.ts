@@ -1,9 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, Matches } from 'class-validator';
-import {
-  TIMELINE_STATES,
-  TimelineDominantState,
-} from './timeline-response.dto.js';
+import { POSTURE_STATES, PostureState } from '../../common/enums/posture-state.enum.js';
 
 export class CreateTimelineEntryDto {
   @ApiProperty({
@@ -25,14 +22,14 @@ export class CreateTimelineEntryDto {
   time!: string;
 
   @ApiProperty({
-    description: '우세 상태',
-    enum: TIMELINE_STATES,
-    example: 'GOOD',
+    description: '우세 자세 상태',
+    enum: POSTURE_STATES,
+    example: 'GOOD_POSTURE',
   })
-  @IsEnum(TIMELINE_STATES, {
-    message: 'dominantState는 GOOD, WARN, BAD 중 하나이어야 합니다.',
+  @IsEnum(POSTURE_STATES, {
+    message: `dominantState는 ${POSTURE_STATES.join(', ')} 중 하나이어야 합니다.`,
   })
-  dominantState!: TimelineDominantState;
+  dominantState!: PostureState;
 
   @ApiPropertyOptional({ description: '메시지', example: '' })
   @IsOptional()
