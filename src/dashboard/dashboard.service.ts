@@ -4,10 +4,7 @@ import {
 } from '@nestjs/common';
 import { DetectionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
-import {
-  DailyDashboardDto,
-  DailySlotDto,
-} from './dto/daily-response.dto.js';
+import { CurrentSlotDto } from './dto/current-slot-response.dto.js';
 import {
   CreateTimelineEntryDto,
   CreateTimelineEntryResponseDto,
@@ -143,59 +140,6 @@ export class DashboardService {
     }
   }
 
-  async getDaily(
-    userId: string,
-    dateStr: string,
-  ): Promise<DailyDashboardDto> {
-    try {
-      const date = parseDate(dateStr);
-      if (!date) {
-        throw new BadRequestException('date는 YYYY-MM-DD 형식이어야 합니다.');
-      }
-
-      const events = await this.fetchSeoulDayEvents(userId, date);
-
-      type SlotEvent = { startMs: number; endMs: number; type: DetectionType };
-      const slots: SlotEvent[][] = Array.from({ length: 8 }, () => []);
-
-      for (const e of events) {
-        const slotIndex = Math.floor(seoulHour(e.detectedAt) / 3);
-        const startMs = e.detectedAt.getTime();
-        slots[slotIndex].push({ startMs, endMs: startMs + e.durationSec * 1000, type: e.type });
-      }
-
-      const overlaps = (a: SlotEvent, b: SlotEvent) =>
-        a.type !== b.type && a.startMs < b.endMs && b.startMs < a.endMs;
-
-      const result: DailySlotDto[] = slots.map((bucket, i) => {
-        const goodEvents = bucket.filter((e) => e.type === DetectionType.GOOD_POSTURE);
-        const badEvents = bucket.filter((e) => e.type !== DetectionType.GOOD_POSTURE);
-
-        let singleBadCount = 0;
-        let overlappingCount = 0;
-        for (const e of badEvents) {
-          if (badEvents.some((other) => other !== e && overlaps(e, other))) {
-            overlappingCount++;
-          } else {
-            singleBadCount++;
-          }
-        }
-
-        return {
-          slotIndex: i,
-          startHour: i * 3,
-          goodPostureCount: goodEvents.length,
-          singleBadCount,
-          overlappingCount,
-        };
-      });
-
-      return { date: dateStr, slots: result };
-    } catch (e) {
-      rethrowAsInternal(e, '서버 오류: 일간 대시보드를 조회할 수 없습니다.');
-    }
-  }
-
   async createTimelineEntry(
     userId: string,
     dto: CreateTimelineEntryDto,
@@ -250,17 +194,47 @@ export class DashboardService {
     }
   }
 
-  private async fetchSeoulDayEvents(userId: string, date: Date) {
-    return this.prisma.detectionEvent.findMany({
-      where: {
-        userId,
-        detectedAt: {
-          gte: seoulDayStartUtc(date),
-          lt: seoulDayStartUtc(addDays(date, 1)),
-        },
-      },
-      select: { detectedAt: true, durationSec: true, type: true },
-    });
+  async getCurrentSlotStats(userId: string): Promise<CurrentSlotDto> {
+    try {
+      const now = new Date();
+      const slotIndex = Math.floor(seoulHour(now) / 3);
+      const today = todaySeoulDate();
+      const slotStartUtc = new Date(seoulDayStartUtc(today).getTime() + slotIndex * 3 * 3_600_000);
+      const slotEndUtc = new Date(slotStartUtc.getTime() + 3 * 3_600_000);
+
+      const events = await this.prisma.detectionEvent.findMany({
+        where: { userId, detectedAt: { gte: slotStartUtc, lt: slotEndUtc } },
+        select: { type: true },
+      });
+
+      const counts = {
+        goodPostureCount: 0,
+        turtleNeckCount: 0,
+        roundShoulderCount: 0,
+        shoulderAsymmetryCount: 0,
+        darkEnvCount: 0,
+      };
+
+      for (const e of events) {
+        switch (e.type) {
+          case DetectionType.GOOD_POSTURE:       counts.goodPostureCount++;       break;
+          case DetectionType.TURTLE_NECK:        counts.turtleNeckCount++;        break;
+          case DetectionType.ROUND_SHOULDER:     counts.roundShoulderCount++;     break;
+          case DetectionType.SHOULDER_ASYMMETRY: counts.shoulderAsymmetryCount++; break;
+          case DetectionType.DARK_ENV:           counts.darkEnvCount++;           break;
+        }
+      }
+
+      await this.prisma.dailySlotStat.upsert({
+        where: { userId_date_slotIndex: { userId, date: today, slotIndex } },
+        update: counts,
+        create: { userId, date: today, slotIndex, ...counts },
+      });
+
+      return { slotIndex, startHour: slotIndex * 3, endHour: slotIndex * 3 + 3, ...counts };
+    } catch (e) {
+      rethrowAsInternal(e, '서버 오류: 현재 슬롯 자세 건수를 조회할 수 없습니다.');
+    }
   }
 
   private calcPctChange(current: number | null, prev: number | null): number | null {

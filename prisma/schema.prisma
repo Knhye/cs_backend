@@ -52,6 +52,7 @@ model User {
   detectionSessions DetectionSession[]
   detectionEvents   DetectionEvent[]
   dailyStats        DailyStat[]
+  dailySlotStats    DailySlotStat[]
   userBadges        UserBadge[]
   weeklyReports     WeeklyReport[]
   timelineEntries   TimelineEntry[]
@@ -202,6 +203,25 @@ model WeeklyReport {
   @@index([userId, weekStartDate])
   @@index([status, createdAt])
   @@map("weekly_reports")
+}
+
+model DailySlotStat {
+  id                     String   @id @default(uuid())
+  userId                 String   @map("user_id")
+  date                   DateTime @db.Date
+  slotIndex              Int      @map("slot_index")
+  goodPostureCount       Int      @default(0) @map("good_posture_count")
+  turtleNeckCount        Int      @default(0) @map("turtle_neck_count")
+  roundShoulderCount     Int      @default(0) @map("round_shoulder_count")
+  shoulderAsymmetryCount Int      @default(0) @map("shoulder_asymmetry_count")
+  darkEnvCount           Int      @default(0) @map("dark_env_count")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, slotIndex])
+  @@index([userId, date])
+  @@map("daily_slot_stats")
 }
 
 model TimelineEntry {

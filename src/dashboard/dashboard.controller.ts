@@ -7,11 +7,8 @@ import {
   CurrentUserPayload,
 } from '../common/decorators/current-user.decorator.js';
 import { DashboardService } from './dashboard.service.js';
-import {
-  DailyQueryDto,
-  WeeklyQueryDto,
-} from './dto/dashboard-query.dto.js';
-import { DailyDashboardDto } from './dto/daily-response.dto.js';
+import { WeeklyQueryDto, DailyQueryDto } from './dto/dashboard-query.dto.js';
+import { CurrentSlotDto } from './dto/current-slot-response.dto.js';
 import {
   CreateTimelineEntryDto,
   CreateTimelineEntryResponseDto,
@@ -62,15 +59,15 @@ export class DashboardController {
   @ApiOperation({
     summary: '일간 스크린타임 (FR-04-03)',
     description:
-      '특정 일자의 3시간 단위(8개 슬롯) 감지 횟수를 반환합니다.\n\n' +
-      '각 슬롯에는 ① GOOD_POSTURE 감지 횟수, ② 단일 불량 타입 감지 횟수, ③ 중첩 감지 횟수가 포함됩니다.',
+      '요청 시각(Asia/Seoul)이 속한 3시간 슬롯의 자세 감지 건수를 반환합니다.\n\n' +
+      '슬롯 경계(0, 3, 6, 9, 12, 15, 18, 21시)를 지나면 건수가 초기화됩니다.\n\n' +
+      '응답값은 daily_slot_stats 테이블에 저장되어 추후 일간 스크린타임 상세 보기에서 활용됩니다.',
   })
-  @ApiCommonResponse({ type: DailyDashboardDto })
+  @ApiCommonResponse({ type: CurrentSlotDto })
   async getDaily(
     @CurrentUser() user: CurrentUserPayload,
-    @Query() query: DailyQueryDto,
-  ): Promise<DailyDashboardDto> {
-    return this.dashboardService.getDaily(user.id, query.date);
+  ): Promise<CurrentSlotDto> {
+    return this.dashboardService.getCurrentSlotStats(user.id);
   }
 
   @Post('timeline')
