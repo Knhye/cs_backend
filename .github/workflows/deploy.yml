@@ -32,8 +32,5 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo kubectl run prisma-migrate --image=3n1hye/cs-backend:latest --restart=Never --rm --attach \
-              --env="DATABASE_URL=$(sudo kubectl get secret cs-secret -o jsonpath='{.data.DATABASE_URL}' | base64 -d)" \
-              -- npx prisma migrate deploy
             sudo kubectl rollout restart deployment cs-deployment
             sudo kubectl rollout status deployment cs-deployment --timeout=120s
