@@ -25,4 +25,4 @@ COPY --from=builder /app/node_modules ./node_modules
 
 EXPOSE 8080
 
-CMD ["node", "dist/src/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
