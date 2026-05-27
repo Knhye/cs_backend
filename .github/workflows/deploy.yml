@@ -33,4 +33,4 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sudo kubectl rollout restart deployment cs-deployment
-            sudo kubectl rollout status deployment cs-deployment --timeout=120s
+            sudo kubectl rollout status deployment cs-deployment --timeout=300s
