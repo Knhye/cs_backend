@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { RedisModule } from './common/redis/redis.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -14,6 +16,10 @@ import { AppController } from './app.controller.js';
   controllers: [AppController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([
+      { name: 'short', ttl: 60_000, limit: 30 },
+      { name: 'long', ttl: 3_600_000, limit: 500 },
+    ]),
     PrismaModule,
     RedisModule,
     AuthModule,
@@ -23,5 +29,6 @@ import { AppController } from './app.controller.js';
     BadgeModule,
     ReportModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

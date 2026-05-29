@@ -6,6 +6,7 @@ import {
   IsString,
   IsUrl,
   Matches,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 
@@ -32,6 +33,7 @@ export class SignupDto {
   @ApiProperty({ example: '홍길동', description: '이름' })
   @IsString()
   @IsNotEmpty({ message: '이름은 필수입니다.' })
+  @MaxLength(50, { message: '이름은 50자 이하여야 합니다.' })
   name!: string;
 
   @ApiProperty({

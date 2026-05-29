@@ -16,13 +16,17 @@ RUN npm run build
 # 실행
 FROM node:20-alpine AS runner
 
+RUN addgroup -S app && adduser -S app -G app
+
 WORKDIR /app
 
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder --chown=app:app /app/package*.json ./
+COPY --from=builder --chown=app:app /app/dist ./dist
+COPY --from=builder --chown=app:app /app/prisma ./prisma
+COPY --from=builder --chown=app:app /app/node_modules ./node_modules
+
+USER app
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+CMD ["node", "dist/src/main.js"]

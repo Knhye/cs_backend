@@ -5,6 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../common/redis/redis.module.js';
 import { MailService } from './mail.service.js';
@@ -49,6 +50,15 @@ export class EmailVerificationService {
 
   async verifyCode(email: string, code: string): Promise<void> {
     try {
+      const attemptKey = `email:verify:attempts:${email}`;
+      const attempts = await this.redis.incr(attemptKey);
+      if (attempts === 1) await this.redis.expire(attemptKey, 300);
+      if (attempts > 5) {
+        throw new BadRequestException(
+          '인증 코드 시도 횟수를 초과했습니다. 5분 후 재시도해 주세요.',
+        );
+      }
+
       const key = `${CODE_PREFIX}${email}`;
       const stored = await this.redis.get(key);
 
@@ -59,6 +69,7 @@ export class EmailVerificationService {
       }
 
       await this.redis.del(key);
+      await this.redis.del(attemptKey);
       await this.redis.set(
         `${VERIFIED_PREFIX}${email}`,
         '1',
@@ -98,6 +109,6 @@ export class EmailVerificationService {
   }
 
   private generateCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return randomInt(100_000, 1_000_000).toString();
   }
 }
