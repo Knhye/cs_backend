@@ -1,59 +1,72 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module.js';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
+
+  app.use(helmet());
 
   app.setGlobalPrefix('api');
 
+  const allowedOrigins = (process.env.FRONTEND_URLS ?? process.env.FRONTEND_URL ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL,
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      cb(new Error('Origin not allowed'), false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    maxAge: 600,
   });
 
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // DTO에 없는 프로퍼티 제거
-      forbidNonWhitelisted: true, // DTO에 없는 프로퍼티 요청 시 400 에러
-      transform: true, // 요청 데이터를 DTO 타입으로 자동 변환
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
 
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor());
 
-  //swagger
-  const config = new DocumentBuilder()
-    .setTitle('API 문서')
-    .setDescription('NestJS API 자동화 문서')
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'Authorization',
-        in: 'header',
-      },
-      'access-token', // 보안 스키마 이름 (컨트롤러에서 @ApiBearerAuth('access-token') 으로 사용)
-    )
-    .build();
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('API 문서')
+      .setDescription('NestJS API 자동화 문서')
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          name: 'Authorization',
+          in: 'header',
+        },
+        'access-token',
+      )
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('/api/v1/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true, // 페이지 새로고침 후에도 인증 유지
-    },
-  });
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('/api/v1/docs', app, document, {
+      swaggerOptions: { persistAuthorization: true },
+    });
 
-  await app.listen(process.env.PORT ?? 8080);
+    logger.log('Swagger docs: http://localhost:8080/api/v1/docs');
+  }
 
-  console.log('Server running on http://localhost:8080');
-  console.log('Swagger docs: http://localhost:8080/api/v1/docs');
+  const port = process.env.PORT ?? 8080;
+  await app.listen(port);
+  logger.log(`Server running on port ${port}`);
 }
 void bootstrap();

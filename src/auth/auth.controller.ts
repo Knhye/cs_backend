@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -90,8 +91,8 @@ export class AuthController {
 
     try {
       const tokens = await this.authService.googleLogin(profile);
-      redirectUrl.searchParams.set('accessToken', tokens.accessToken);
-      redirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
+      const code = await this.authService.issueOneTimeCode(tokens);
+      redirectUrl.searchParams.set('code', code);
     } catch (error) {
       redirectUrl.searchParams.set(
         'error',
@@ -100,6 +101,16 @@ export class AuthController {
     }
 
     res.redirect(redirectUrl.toString());
+  }
+
+  @Get('google/token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Google OAuth 일회용 코드를 토큰으로 교환' })
+  @ApiCommonResponse({ type: TokenResponseDto })
+  async exchangeGoogleCode(
+    @Query('code') code: string,
+  ): Promise<TokenResponseDto> {
+    return this.authService.exchangeOneTimeCode(code);
   }
 
   @Post('refresh')
@@ -136,6 +147,7 @@ export class AuthController {
   }
 
   private extractBearerToken(req: Request): string {
-    return req.headers.authorization?.replace('Bearer ', '') ?? '';
+    const match = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? '');
+    return match?.[1] ?? '';
   }
 }

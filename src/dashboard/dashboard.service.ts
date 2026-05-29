@@ -202,28 +202,20 @@ export class DashboardService {
       const slotStartUtc = new Date(seoulDayStartUtc(today).getTime() + slotIndex * 3 * 3_600_000);
       const slotEndUtc = new Date(slotStartUtc.getTime() + 3 * 3_600_000);
 
-      const events = await this.prisma.detectionEvent.findMany({
+      const grouped = await this.prisma.detectionEvent.groupBy({
+        by: ['type'],
         where: { userId, detectedAt: { gte: slotStartUtc, lt: slotEndUtc } },
-        select: { type: true },
+        _count: { type: true },
       });
 
+      const countByType = new Map(grouped.map((g) => [g.type, g._count.type]));
       const counts = {
-        goodPostureCount: 0,
-        turtleNeckCount: 0,
-        roundShoulderCount: 0,
-        shoulderAsymmetryCount: 0,
-        darkEnvCount: 0,
+        goodPostureCount: countByType.get(DetectionType.GOOD_POSTURE) ?? 0,
+        turtleNeckCount: countByType.get(DetectionType.TURTLE_NECK) ?? 0,
+        roundShoulderCount: countByType.get(DetectionType.ROUND_SHOULDER) ?? 0,
+        shoulderAsymmetryCount: countByType.get(DetectionType.SHOULDER_ASYMMETRY) ?? 0,
+        darkEnvCount: countByType.get(DetectionType.DARK_ENV) ?? 0,
       };
-
-      for (const e of events) {
-        switch (e.type) {
-          case DetectionType.GOOD_POSTURE:       counts.goodPostureCount++;       break;
-          case DetectionType.TURTLE_NECK:        counts.turtleNeckCount++;        break;
-          case DetectionType.ROUND_SHOULDER:     counts.roundShoulderCount++;     break;
-          case DetectionType.SHOULDER_ASYMMETRY: counts.shoulderAsymmetryCount++; break;
-          case DetectionType.DARK_ENV:           counts.darkEnvCount++;           break;
-        }
-      }
 
       await this.prisma.dailySlotStat.upsert({
         where: { userId_date_slotIndex: { userId, date: today, slotIndex } },

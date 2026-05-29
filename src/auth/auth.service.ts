@@ -1,11 +1,15 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { createHash, randomUUID } from 'crypto';
+import Redis from 'ioredis';
+import { REDIS_CLIENT } from '../common/redis/redis.module.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SignupDto } from './dto/signup.dto.js';
 import { LoginDto } from './dto/login.dto.js';
@@ -23,6 +27,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly tokenBlacklistService: TokenBlacklistService,
     private readonly emailVerificationService: EmailVerificationService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   async signup(dto: SignupDto): Promise<TokenResponseDto> {
@@ -37,7 +42,7 @@ export class AuthService {
         throw new ConflictException('이미 사용 중인 이메일입니다.');
       }
 
-      const hashedPassword = await bcrypt.hash(dto.password, 10);
+      const hashedPassword = await bcrypt.hash(dto.password, 12);
 
       const user = await this.prisma.user.create({
         data: {
@@ -118,8 +123,9 @@ export class AuthService {
 
   async refresh(refreshToken: string): Promise<TokenResponseDto> {
     try {
+      const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
       const stored = await this.prisma.refreshToken.findUnique({
-        where: { token: refreshToken },
+        where: { tokenHash },
         include: { user: true },
       });
 
@@ -140,6 +146,27 @@ export class AuthService {
     } catch (e) {
       rethrowAsInternal(e, '서버 오류: 토큰 갱신을 처리할 수 없습니다.');
     }
+  }
+
+  async issueOneTimeCode(tokens: TokenResponseDto): Promise<string> {
+    const code = randomUUID();
+    await this.redis.set(
+      `oauth:code:${code}`,
+      JSON.stringify(tokens),
+      'EX',
+      60,
+    );
+    return code;
+  }
+
+  async exchangeOneTimeCode(code: string): Promise<TokenResponseDto> {
+    const key = `oauth:code:${code}`;
+    const raw = await this.redis.get(key);
+    if (!raw) {
+      throw new UnauthorizedException('유효하지 않거나 만료된 코드입니다.');
+    }
+    await this.redis.del(key);
+    return JSON.parse(raw) as TokenResponseDto;
   }
 
   async logout(userId: string, accessToken: string): Promise<void> {
@@ -201,9 +228,10 @@ export class AuthService {
       ? new Date(Date.now() + 24 * 60 * 60 * 1000)
       : new Date(Date.now() + 60 * 60 * 1000);
 
+    const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
     await this.prisma.refreshToken.create({
       data: {
-        token: refreshToken,
+        tokenHash,
         userId,
         expiresAt: refreshExpiresAt,
       },

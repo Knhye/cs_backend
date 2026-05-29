@@ -44,11 +44,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
         error = (res.error as string) ?? error;
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
       this.logger.error(
         `Unhandled Error: ${exception.message}`,
         exception.stack,
       );
+      message =
+        process.env.NODE_ENV === 'production'
+          ? '서버 내부 오류가 발생했습니다.'
+          : exception.message;
     }
 
     const errorBody = new ApiErrorResponse(
