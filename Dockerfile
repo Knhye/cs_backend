@@ -5,11 +5,12 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY prisma ./prisma
+COPY tsconfig*.json ./
 
 RUN npm ci
 RUN npx prisma generate
 
-COPY . .
+COPY src ./src
 
 RUN npm run build
 
