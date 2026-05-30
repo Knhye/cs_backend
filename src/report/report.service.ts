@@ -334,7 +334,10 @@ export class ReportService {
         ];
         const dominantState =
           total > 0
-            ? entries.reduce((acc, cur) => (cur[1] > acc[1] ? cur : acc))[0]
+            ? entries.reduce((acc, cur) =>
+                cur[1] > acc[1] ? cur : acc,
+              entries[0],
+              )[0]
             : null;
         const healthScore =
           total > 0
@@ -368,7 +371,7 @@ export class ReportService {
   private getFirstStartedAt(sessions: { startedAt: Date }[]): Date | null {
     if (sessions.length === 0) return null;
     return sessions.reduce(
-      (min, s) => (s.startedAt < min ? s.startedAt : min),
+      (min, s) => (s.startedAt.getTime() < min.getTime() ? s.startedAt : min),
       sessions[0].startedAt,
     );
   }
@@ -377,7 +380,7 @@ export class ReportService {
     return sessions.reduce<Date | null>((max, s) => {
       if (!s.endedAt) return max;
       if (!max) return s.endedAt;
-      return s.endedAt > max ? s.endedAt : max;
+      return s.endedAt.getTime() > max.getTime() ? s.endedAt : max;
     }, null);
   }
 }
