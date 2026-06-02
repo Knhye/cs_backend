@@ -10,7 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ApiCommonResponse } from '../common/decorators/api-common-response.decorator.js';
 import {
   CurrentUser,
@@ -164,6 +164,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'FCM 푸시 토큰 삭제 (로그아웃 / 알림 OFF)' })
+  @ApiParam({ name: 'deviceId', description: '삭제할 기기 고유 식별자' })
   @ApiCommonResponse({ description: '삭제 성공' })
   async removePushToken(
     @CurrentUser() user: CurrentUserPayload,

@@ -4,10 +4,14 @@ import * as admin from 'firebase-admin';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 export interface FcmPayload {
-  type: string;
   title: string;
   body: string;
-  data?: Record<string, string>;
+  data: {
+    type: string;
+    state?: string;
+    url?: string;
+    [key: string]: string | undefined;
+  };
 }
 
 const STALE_CODES = new Set([
@@ -66,7 +70,10 @@ export class FcmService implements OnModuleInit {
 
     if (!settings?.pushEnabled || tokens.length === 0) return;
 
-    const { type, title, body, data } = payload;
+    const { title, body, data } = payload;
+    const fcmData = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined),
+    ) as Record<string, string>;
     const staleDeviceIds: string[] = [];
 
     await Promise.all(
@@ -75,7 +82,7 @@ export class FcmService implements OnModuleInit {
           await this.messaging!.send({
             token,
             notification: { title, body },
-            data: { type, ...(data ?? {}) },
+            data: fcmData,
           });
         } catch (err: any) {
           const code: string = err?.code ?? err?.errorInfo?.code ?? '';
