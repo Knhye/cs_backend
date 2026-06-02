@@ -11,7 +11,7 @@ export class PrismaService
     const isProd = process.env.NODE_ENV === 'production';
     const adapter = new PrismaPg({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: isProd },
+      ssl: isProd ? { rejectUnauthorized: false } : false,
     });
     super({ adapter });
   }
