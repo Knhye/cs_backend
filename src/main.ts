@@ -40,30 +40,28 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor());
 
-  if (process.env.NODE_ENV !== 'production') {
-    const config = new DocumentBuilder()
-      .setTitle('API 문서')
-      .setDescription('NestJS API 자동화 문서')
-      .setVersion('1.0')
-      .addBearerAuth(
-        {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-          name: 'Authorization',
-          in: 'header',
-        },
-        'access-token',
-      )
-      .build();
+  const config = new DocumentBuilder()
+    .setTitle('API 문서')
+    .setDescription('NestJS API 자동화 문서')
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        in: 'header',
+      },
+      'access-token',
+    )
+    .build();
 
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('/api/v1/docs', app, document, {
-      swaggerOptions: { persistAuthorization: true },
-    });
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('/api/v1/docs', app, document, {
+    swaggerOptions: { persistAuthorization: true },
+  });
 
-    logger.log('Swagger docs: http://localhost:8080/api/v1/docs');
-  }
+  logger.log(`Swagger docs available at /api/v1/docs`);
 
   const port = process.env.PORT ?? 8080;
   await app.listen(port);
