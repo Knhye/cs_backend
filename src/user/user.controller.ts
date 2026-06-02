@@ -1,9 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
+  Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -31,6 +34,7 @@ import {
   UpdateDarkDetectionDto,
 } from './dto/update-dark-detection.dto.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
+import { RegisterPushTokenDto } from './dto/push-token.dto.js';
 import {
   UserResponseDto,
   UserSettingsDto,
@@ -139,6 +143,34 @@ export class UserController {
     @CurrentUser() user: CurrentUserPayload,
   ): Promise<BadgeProgressResponseDto> {
     return this.badgeService.getProgress(user.id);
+  }
+
+  @Post('me/push-tokens')
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'FCM 푸시 토큰 등록 / 갱신' })
+  @ApiCommonResponse({ description: '등록 성공' })
+  async registerPushToken(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: RegisterPushTokenDto,
+  ): Promise<null> {
+    await this.userService.registerPushToken(user.id, dto);
+    return null;
+  }
+
+  @Delete('me/push-tokens/:deviceId')
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'FCM 푸시 토큰 삭제 (로그아웃 / 알림 OFF)' })
+  @ApiCommonResponse({ description: '삭제 성공' })
+  async removePushToken(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('deviceId') deviceId: string,
+  ): Promise<null> {
+    await this.userService.removePushToken(user.id, deviceId);
+    return null;
   }
 
   @Patch('me/password')

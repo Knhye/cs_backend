@@ -56,6 +56,7 @@ model User {
   userBadges        UserBadge[]
   weeklyReports     WeeklyReport[]
   timelineEntries   TimelineEntry[]
+  pushTokens        PushToken[]
 
   @@unique([provider, providerId])
   @@map("users")
@@ -237,4 +238,20 @@ model TimelineEntry {
 
   @@index([userId, date])
   @@map("timeline_entries")
+}
+
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String
+  platform  String   @default("web")
+  deviceId  String   @map("device_id")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@map("push_tokens")
 }
