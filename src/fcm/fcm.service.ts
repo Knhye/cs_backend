@@ -26,14 +26,17 @@ export class FcmService implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    const projectId = this.config.get<string>('FIREBASE_PROJECT_ID');
-    const clientEmail = this.config.get<string>('FIREBASE_CLIENT_EMAIL');
-    const privateKey = this.config
-      .get<string>('FIREBASE_PRIVATE_KEY')
-      ?.replace(/\\n/g, '\n');
+    const raw = this.config.get<string>('FIREBASE_SERVICE_ACCOUNT');
+    if (!raw) {
+      this.logger.warn('FIREBASE_SERVICE_ACCOUNT 미설정 — FCM 비활성화');
+      return;
+    }
 
-    if (!projectId || !clientEmail || !privateKey) {
-      this.logger.warn('Firebase 환경변수 미설정 — FCM 비활성화');
+    let serviceAccount: admin.ServiceAccount;
+    try {
+      serviceAccount = JSON.parse(raw) as admin.ServiceAccount;
+    } catch {
+      this.logger.error('FIREBASE_SERVICE_ACCOUNT JSON 파싱 실패');
       return;
     }
 
@@ -41,11 +44,7 @@ export class FcmService implements OnModuleInit {
       admin.apps.length > 0
         ? admin.app()
         : admin.initializeApp({
-            credential: admin.credential.cert({
-              projectId,
-              clientEmail,
-              privateKey,
-            }),
+            credential: admin.credential.cert(serviceAccount),
           });
 
     this.messaging = admin.messaging(app);
