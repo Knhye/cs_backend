@@ -27,6 +27,7 @@ import {
   UserSettingsDto,
 } from './dto/user-response.dto.js';
 import { rethrowAsInternal } from '../common/utils/error.util.js';
+import { RegisterPushTokenDto } from './dto/push-token.dto.js';
 
 @Injectable()
 export class UserService {
@@ -224,6 +225,35 @@ export class UserService {
       };
     } catch (e) {
       rethrowAsInternal(e, '서버 오류: 아바타 상태를 조회할 수 없습니다.');
+    }
+  }
+
+  async registerPushToken(
+    userId: string,
+    dto: RegisterPushTokenDto,
+  ): Promise<void> {
+    try {
+      await this.prisma.pushToken.upsert({
+        where: { userId_deviceId: { userId, deviceId: dto.deviceId } },
+        update: { token: dto.token, userAgent: dto.userAgent ?? null },
+        create: {
+          userId,
+          token: dto.token,
+          platform: dto.platform,
+          deviceId: dto.deviceId,
+          userAgent: dto.userAgent ?? null,
+        },
+      });
+    } catch (e) {
+      rethrowAsInternal(e, '서버 오류: 푸시 토큰을 등록할 수 없습니다.');
+    }
+  }
+
+  async removePushToken(userId: string, deviceId: string): Promise<void> {
+    try {
+      await this.prisma.pushToken.deleteMany({ where: { userId, deviceId } });
+    } catch (e) {
+      rethrowAsInternal(e, '서버 오류: 푸시 토큰을 삭제할 수 없습니다.');
     }
   }
 
