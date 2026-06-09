@@ -28,11 +28,14 @@ export function ApiCommonResponse<T extends Type<unknown>>(options: {
 }) {
   const { type, isArray = false, status = 200, description } = options;
 
-  const dataSchema = type
-    ? isArray
-      ? { type: 'array', items: { $ref: getSchemaPath(type) } }
-      : { $ref: getSchemaPath(type) }
-    : { nullable: true, example: null };
+  let dataSchema: object;
+  if (!type) {
+    dataSchema = { nullable: true, example: null };
+  } else if (isArray) {
+    dataSchema = { type: 'array', items: { $ref: getSchemaPath(type) } };
+  } else {
+    dataSchema = { $ref: getSchemaPath(type) };
+  }
 
   const successSchema = {
     allOf: [

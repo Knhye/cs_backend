@@ -10,7 +10,7 @@ import {
   MinLength,
 } from 'class-validator';
 
-const PASSWORD_REGEX = /^[a-zA-Z0-9!@#%^*()\-_=+\[\]{}.,]+$/;
+const PASSWORD_REGEX = /^[a-zA-Z0-9!@#%^*()\-_=+[\]{}.,]+$/;
 const PASSWORD_REGEX_MESSAGE =
   '비밀번호에 사용할 수 없는 특수문자가 포함되어 있습니다. 허용 특수문자: !@#%^*()-_=+[]{}.,';
 
