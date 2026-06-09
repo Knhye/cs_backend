@@ -14,6 +14,15 @@ export class CurrentSessionResponseDto {
 
   @ApiProperty({ description: '시작 시각' })
   startedAt!: Date;
+
+  @ApiProperty({ enum: ['ACTIVE', 'PAUSED'], description: '세션 상태' })
+  status!: 'ACTIVE' | 'PAUSED';
+
+  @ApiProperty({ description: '일시정지 시각 (PAUSED 상태일 때만 값 있음)', nullable: true })
+  pausedAt!: Date | null;
+
+  @ApiProperty({ description: '누적 일시정지 시간(초)' })
+  totalPausedSec!: number;
 }
 
 export class NewBadgeDto {

@@ -4,12 +4,15 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
-import { DetectionType, Prisma } from '@prisma/client';
+import { DetectionType, Prisma, SessionStatus } from '@prisma/client';
 import { BadgeService } from '../badge/badge.service.js';
 import { FcmService } from '../fcm/fcm.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EndSessionDto } from './dto/end-session.dto.js';
+import { PauseSessionDto, PauseSessionResponseDto } from './dto/pause-session.dto.js';
+import { ResumeSessionDto, ResumeSessionResponseDto } from './dto/resume-session.dto.js';
 import {
   CurrentSessionResponseDto,
   SessionEndResponseDto,
@@ -39,6 +42,7 @@ const POSTURE_SCORE_WEIGHTS = {
 } as const;
 
 const GAP_THRESHOLD_SEC = 300;
+const CLOCK_SKEW_MS = 60_000;
 
 interface AggregateBuckets {
   goodPostureSec: number;
@@ -62,6 +66,8 @@ interface PreparedSegment {
   durationSec: number;
   clientEventId: string | null;
 }
+
+type PauseRecord = { pausedAt: Date; resumedAt: Date | null };
 
 @Injectable()
 export class SessionService {
@@ -88,6 +94,85 @@ export class SessionService {
     }
   }
 
+  async pause(userId: string, sessionId: string, dto: PauseSessionDto): Promise<PauseSessionResponseDto> {
+    try {
+      const session = await this.findSessionForUser(userId, sessionId);
+      if (session.endedAt) {
+        throw new ConflictException('종료된 세션은 일시정지할 수 없습니다.');
+      }
+      if (session.status === SessionStatus.PAUSED) {
+        throw new ConflictException('이미 일시정지된 세션입니다.');
+      }
+
+      const pausedAt = new Date(dto.pausedAt);
+      this.validateTimestamp(pausedAt, session.startedAt, 'pausedAt');
+
+      await this.prisma.$transaction([
+        this.prisma.detectionSession.update({
+          where: { id: sessionId },
+          data: { status: SessionStatus.PAUSED, pausedAt },
+        }),
+        this.prisma.sessionPause.create({
+          data: { sessionId, pausedAt },
+        }),
+      ]);
+
+      return {
+        sessionId,
+        status: 'PAUSED',
+        pausedAt,
+        totalPausedSec: session.totalPausedSec,
+      };
+    } catch (e) {
+      rethrowAsInternal(e, '서버 오류: 세션을 일시정지할 수 없습니다.');
+    }
+  }
+
+  async resume(userId: string, sessionId: string, dto: ResumeSessionDto): Promise<ResumeSessionResponseDto> {
+    try {
+      const session = await this.findSessionForUser(userId, sessionId);
+      if (session.endedAt) {
+        throw new ConflictException('종료된 세션은 재개할 수 없습니다.');
+      }
+      if (session.status !== SessionStatus.PAUSED) {
+        throw new ConflictException('일시정지 상태가 아닌 세션은 재개할 수 없습니다.');
+      }
+
+      const resumedAt = new Date(dto.resumedAt);
+      this.validateTimestamp(resumedAt, session.pausedAt!, 'resumedAt');
+      if (resumedAt <= session.pausedAt!) {
+        throw new UnprocessableEntityException('resumedAt은 pausedAt 이후여야 합니다.');
+      }
+
+      const durationSec = Math.floor((resumedAt.getTime() - session.pausedAt!.getTime()) / 1000);
+      const newTotalPausedSec = session.totalPausedSec + durationSec;
+
+      await this.prisma.$transaction([
+        this.prisma.sessionPause.updateMany({
+          where: { sessionId, resumedAt: null },
+          data: { resumedAt, durationSec },
+        }),
+        this.prisma.detectionSession.update({
+          where: { id: sessionId },
+          data: {
+            status: SessionStatus.ACTIVE,
+            pausedAt: null,
+            totalPausedSec: newTotalPausedSec,
+          },
+        }),
+      ]);
+
+      return {
+        sessionId,
+        status: 'ACTIVE',
+        resumedAt,
+        totalPausedSec: newTotalPausedSec,
+      };
+    } catch (e) {
+      rethrowAsInternal(e, '서버 오류: 세션을 재개할 수 없습니다.');
+    }
+  }
+
   async end(userId: string, sessionId: string, dto: EndSessionDto): Promise<SessionEndResponseDto> {
     try {
       const session = await this.findSessionForUser(userId, sessionId);
@@ -96,18 +181,42 @@ export class SessionService {
       }
 
       const endedAt = new Date(dto.endedAt);
-      const totalDurationSec = Math.max(
+
+      // Finalize ongoing pause if PAUSED
+      let totalPausedSec = session.totalPausedSec;
+      if (session.status === SessionStatus.PAUSED) {
+        const finalPauseSec = Math.max(
+          0,
+          Math.floor((endedAt.getTime() - session.pausedAt!.getTime()) / 1000),
+        );
+        totalPausedSec += finalPauseSec;
+        await this.prisma.$transaction([
+          this.prisma.sessionPause.updateMany({
+            where: { sessionId, resumedAt: null },
+            data: { resumedAt: endedAt, durationSec: finalPauseSec },
+          }),
+          this.prisma.detectionSession.update({
+            where: { id: sessionId },
+            data: { status: SessionStatus.ACTIVE, pausedAt: null, totalPausedSec },
+          }),
+        ]);
+      }
+
+      const rawDurationSec = Math.max(
         0,
         Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000),
       );
+      const totalDetectionSec = Math.max(0, rawDurationSec - totalPausedSec);
 
+      const pauses = await this.prisma.sessionPause.findMany({ where: { sessionId } });
       const segmentCount = await this.prisma.detectionSegment.count({ where: { sessionId } });
 
       if (segmentCount > 0) {
-        return await this.endWithSegments(userId, sessionId, session.startedAt, endedAt, totalDurationSec);
+        return await this.endWithSegments(
+          userId, sessionId, session.startedAt, endedAt, totalDetectionSec, pauses,
+        );
       }
-
-      return await this.endWithEvents(userId, sessionId, endedAt, totalDurationSec);
+      return await this.endWithEvents(userId, sessionId, endedAt, totalDetectionSec);
     } catch (e) {
       rethrowAsInternal(e, '서버 오류: 세션을 종료할 수 없습니다.');
     }
@@ -118,9 +227,10 @@ export class SessionService {
     sessionId: string,
     sessionStart: Date,
     endedAt: Date,
-    totalDurationSec: number,
+    totalDetectionSec: number,
+    pauses: PauseRecord[],
   ): Promise<SessionEndResponseDto> {
-    await this.fillGapsWithUnclassified(userId, sessionId, sessionStart, endedAt);
+    await this.fillGapsWithUnclassified(userId, sessionId, sessionStart, endedAt, pauses);
 
     const allSegments = await this.prisma.detectionSegment.findMany({
       where: { sessionId },
@@ -129,7 +239,7 @@ export class SessionService {
 
     const secBuckets = this.aggregateSegmentSecs(allSegments);
     const shoulderIssueSec = secBuckets.roundShoulderSec + secBuckets.shoulderAsymmetrySec;
-    const healthScore = this.computeHealthScore(secBuckets.goodPostureSec, totalDurationSec);
+    const healthScore = this.computeHealthScore(secBuckets.goodPostureSec, totalDetectionSec);
 
     const countByState = (state: DetectionType) => allSegments.filter(s => s.state === state).length;
     const goodPostureCount = countByState(DetectionType.GOOD_POSTURE);
@@ -142,7 +252,8 @@ export class SessionService {
       where: { id: sessionId },
       data: {
         endedAt,
-        totalDurationSec,
+        status: SessionStatus.ENDED,
+        totalDurationSec: totalDetectionSec,
         goodPostureSec: secBuckets.goodPostureSec,
         turtleNeckSec: secBuckets.turtleNeckSec,
         shoulderIssueSec,
@@ -159,7 +270,7 @@ export class SessionService {
     await Promise.all([...affectedDates].map(d => this.recomputeDailyFromSegments(userId, d)));
 
     return await this.finalizeBadgesAndReturn(userId, sessionId, {
-      totalDurationSec,
+      totalDurationSec: totalDetectionSec,
       goodPostureSec: secBuckets.goodPostureSec,
       turtleNeckSec: secBuckets.turtleNeckSec,
       shoulderIssueSec,
@@ -176,10 +287,10 @@ export class SessionService {
     userId: string,
     sessionId: string,
     endedAt: Date,
-    totalDurationSec: number,
+    totalDetectionSec: number,
   ): Promise<SessionEndResponseDto> {
     const buckets = await this.aggregateBySession(sessionId);
-    const healthScore = this.computeHealthScore(buckets.goodPostureSec, totalDurationSec);
+    const healthScore = this.computeHealthScore(buckets.goodPostureSec, totalDetectionSec);
     const seoulDate = toSeoulDate(endedAt);
     const shoulderIssueSec = buckets.roundShoulderSec + buckets.shoulderAsymmetrySec;
     const shoulderIssueCount = buckets.roundShoulderCount + buckets.shoulderAsymmetryCount;
@@ -189,7 +300,8 @@ export class SessionService {
         where: { id: sessionId },
         data: {
           endedAt,
-          totalDurationSec,
+          status: SessionStatus.ENDED,
+          totalDurationSec: totalDetectionSec,
           goodPostureSec: buckets.goodPostureSec,
           turtleNeckSec: buckets.turtleNeckSec,
           shoulderIssueSec,
@@ -204,9 +316,8 @@ export class SessionService {
       this.prisma.dailyStat.upsert({
         where: { userId_date: { userId, date: seoulDate } },
         create: {
-          userId,
-          date: seoulDate,
-          totalDetectionSec: totalDurationSec,
+          userId, date: seoulDate,
+          totalDetectionSec,
           goodPostureSec: buckets.goodPostureSec,
           turtleNeckSec: buckets.turtleNeckSec,
           roundShoulderSec: buckets.roundShoulderSec,
@@ -220,7 +331,7 @@ export class SessionService {
           healthScore,
         },
         update: {
-          totalDetectionSec: { increment: totalDurationSec },
+          totalDetectionSec: { increment: totalDetectionSec },
           goodPostureSec: { increment: buckets.goodPostureSec },
           turtleNeckSec: { increment: buckets.turtleNeckSec },
           roundShoulderSec: { increment: buckets.roundShoulderSec },
@@ -238,7 +349,7 @@ export class SessionService {
     await this.recomputeDailyScores(userId, seoulDate);
 
     return await this.finalizeBadgesAndReturn(userId, sessionId, {
-      totalDurationSec,
+      totalDurationSec: totalDetectionSec,
       goodPostureSec: buckets.goodPostureSec,
       turtleNeckSec: buckets.turtleNeckSec,
       shoulderIssueSec,
@@ -277,8 +388,10 @@ export class SessionService {
       if (session.endedAt) {
         throw new ConflictException('종료된 세션에는 구간을 추가할 수 없습니다.');
       }
+      if (session.status === SessionStatus.PAUSED) {
+        throw new ConflictException('일시정지된 세션에는 구간을 추가할 수 없습니다.');
+      }
 
-      // Parse and basic validation
       const incoming = dto.segments.map(s => {
         const startedAt = new Date(s.startedAt);
         const endedAt = new Date(s.endedAt);
@@ -290,7 +403,6 @@ export class SessionService {
         return { ...s, startedAt, endedAt };
       });
 
-      // Dedup within batch
       const batchIds = new Set<string>();
       for (const s of incoming) {
         if (s.clientEventId) {
@@ -301,7 +413,6 @@ export class SessionService {
         }
       }
 
-      // Filter out already-stored clientEventIds
       const clientEventIds = [...batchIds];
       const existingIds =
         clientEventIds.length > 0
@@ -311,23 +422,18 @@ export class SessionService {
             })
           : [];
       const storedIds = new Set(existingIds.map(r => r.clientEventId));
-      const newItems = incoming.filter(
-        s => !s.clientEventId || !storedIds.has(s.clientEventId),
-      );
+      const newItems = incoming.filter(s => !s.clientEventId || !storedIds.has(s.clientEventId));
 
       if (newItems.length === 0) return { accepted: 0 };
 
-      // Sort by startedAt
       newItems.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
-      // Check overlap within batch
       for (let i = 1; i < newItems.length; i++) {
         if (newItems[i].startedAt < newItems[i - 1].endedAt) {
           throw new ConflictException('업로드된 구간들 사이에 시간이 중복됩니다.');
         }
       }
 
-      // Check overlap with existing session segments
       const minStart = newItems[0].startedAt;
       const maxEnd = newItems[newItems.length - 1].endedAt;
       const overlap = await this.prisma.detectionSegment.findFirst({
@@ -337,7 +443,6 @@ export class SessionService {
         throw new ConflictException('기존 세션 구간과 시간이 중복됩니다.');
       }
 
-      // Split at KST midnight boundaries
       const prepared: PreparedSegment[] = [];
       for (const item of newItems) {
         prepared.push(
@@ -362,7 +467,6 @@ export class SessionService {
         skipDuplicates: true,
       });
 
-      // Recompute daily aggregates for affected KST dates
       const affectedDates = new Set(prepared.map(s => formatDate(toSeoulDate(s.startedAt))));
       await Promise.all([...affectedDates].map(d => this.recomputeDailyFromSegments(userId, d)));
 
@@ -381,6 +485,9 @@ export class SessionService {
       const session = await this.findSessionForUser(userId, sessionId);
       if (session.endedAt) {
         throw new ConflictException('종료된 세션에는 이벤트를 추가할 수 없습니다.');
+      }
+      if (session.status === SessionStatus.PAUSED) {
+        throw new ConflictException('일시정지된 세션에는 이벤트를 추가할 수 없습니다.');
       }
       const data: Prisma.DetectionEventCreateManyInput[] = dto.events.map(e => ({
         sessionId,
@@ -404,9 +511,24 @@ export class SessionService {
         orderBy: { startedAt: 'desc' },
       });
       if (!session) return null;
-      return { sessionId: session.id, startedAt: session.startedAt };
+      return {
+        sessionId: session.id,
+        startedAt: session.startedAt,
+        status: session.status === SessionStatus.PAUSED ? 'PAUSED' : 'ACTIVE',
+        pausedAt: session.pausedAt,
+        totalPausedSec: session.totalPausedSec,
+      };
     } catch (e) {
       rethrowAsInternal(e, '서버 오류: 세션 정보를 조회할 수 없습니다.');
+    }
+  }
+
+  private validateTimestamp(ts: Date, notBefore: Date, fieldName: string): void {
+    if (ts.getTime() > Date.now() + CLOCK_SKEW_MS) {
+      throw new UnprocessableEntityException(`${fieldName}이 미래 시각입니다.`);
+    }
+    if (ts < notBefore) {
+      throw new UnprocessableEntityException(`${fieldName}이 허용 범위 이전입니다.`);
     }
   }
 
@@ -431,8 +553,7 @@ export class SessionService {
 
       if (durationSec > 0) {
         results.push({
-          sessionId,
-          userId,
+          sessionId, userId,
           state: raw.state,
           startedAt: current,
           endedAt: segEnd,
@@ -453,6 +574,7 @@ export class SessionService {
     sessionId: string,
     sessionStart: Date,
     sessionEnd: Date,
+    pauses: PauseRecord[],
   ): Promise<void> {
     const existing = await this.prisma.detectionSegment.findMany({
       where: { sessionId },
@@ -462,50 +584,70 @@ export class SessionService {
 
     const gapSegs: PreparedSegment[] = [];
 
-    if (existing.length === 0) {
-      const totalSec = Math.floor((sessionEnd.getTime() - sessionStart.getTime()) / 1000);
-      if (totalSec > GAP_THRESHOLD_SEC) {
-        gapSegs.push(
-          ...this.splitAtKstMidnight(
-            { state: DetectionType.UNCLASSIFIED, startedAt: sessionStart, endedAt: sessionEnd, clientEventId: null },
-            sessionId,
-            userId,
-          ),
-        );
-      }
-    } else {
-      for (let i = 1; i < existing.length; i++) {
-        const gapSec = Math.floor(
-          (existing[i].startedAt.getTime() - existing[i - 1].endedAt.getTime()) / 1000,
-        );
-        if (gapSec > GAP_THRESHOLD_SEC) {
+    const processGap = (gapStart: Date, gapEnd: Date) => {
+      const activeIntervals = this.getActiveIntervals(gapStart, gapEnd, pauses);
+      const totalActiveSec = activeIntervals.reduce(
+        (sum, iv) => sum + Math.floor((iv.end.getTime() - iv.start.getTime()) / 1000),
+        0,
+      );
+      if (totalActiveSec > GAP_THRESHOLD_SEC) {
+        for (const iv of activeIntervals) {
           gapSegs.push(
             ...this.splitAtKstMidnight(
-              { state: DetectionType.UNCLASSIFIED, startedAt: existing[i - 1].endedAt, endedAt: existing[i].startedAt, clientEventId: null },
-              sessionId,
-              userId,
+              { state: DetectionType.UNCLASSIFIED, startedAt: iv.start, endedAt: iv.end, clientEventId: null },
+              sessionId, userId,
             ),
           );
         }
       }
+    };
 
-      const trailingSec = Math.floor(
-        (sessionEnd.getTime() - existing[existing.length - 1].endedAt.getTime()) / 1000,
-      );
-      if (trailingSec > GAP_THRESHOLD_SEC) {
-        gapSegs.push(
-          ...this.splitAtKstMidnight(
-            { state: DetectionType.UNCLASSIFIED, startedAt: existing[existing.length - 1].endedAt, endedAt: sessionEnd, clientEventId: null },
-            sessionId,
-            userId,
-          ),
-        );
+    if (existing.length === 0) {
+      processGap(sessionStart, sessionEnd);
+    } else {
+      for (let i = 1; i < existing.length; i++) {
+        processGap(existing[i - 1].endedAt, existing[i].startedAt);
       }
+      processGap(existing[existing.length - 1].endedAt, sessionEnd);
     }
 
     if (gapSegs.length > 0) {
       await this.prisma.detectionSegment.createMany({ data: gapSegs });
     }
+  }
+
+  private getActiveIntervals(
+    gapStart: Date,
+    gapEnd: Date,
+    pauses: PauseRecord[],
+  ): Array<{ start: Date; end: Date }> {
+    const result: Array<{ start: Date; end: Date }> = [];
+    let cursorMs = gapStart.getTime();
+    const endMs = gapEnd.getTime();
+
+    const overlapping = pauses
+      .filter(p => {
+        const pEndMs = (p.resumedAt ?? gapEnd).getTime();
+        return p.pausedAt.getTime() < endMs && pEndMs > cursorMs;
+      })
+      .sort((a, b) => a.pausedAt.getTime() - b.pausedAt.getTime());
+
+    for (const pause of overlapping) {
+      const pStartMs = Math.max(pause.pausedAt.getTime(), cursorMs);
+      const pEndMs = Math.min((pause.resumedAt ?? gapEnd).getTime(), endMs);
+
+      if (pStartMs > cursorMs) {
+        result.push({ start: new Date(cursorMs), end: new Date(pStartMs) });
+      }
+      cursorMs = pEndMs;
+      if (cursorMs >= endMs) break;
+    }
+
+    if (cursorMs < endMs) {
+      result.push({ start: new Date(cursorMs), end: gapEnd });
+    }
+
+    return result;
   }
 
   private async recomputeDailyFromSegments(userId: string, dateStr: string): Promise<void> {
@@ -529,8 +671,8 @@ export class SessionService {
       unclassifiedSec: 0,
     };
     const slots = Array.from({ length: 8 }, () => ({ ...totals }));
-
     const countByState: Record<string, number> = {};
+
     for (const seg of segments) {
       countByState[seg.state] = (countByState[seg.state] ?? 0) + 1;
       totals.totalDetectionSec += seg.durationSec;
@@ -543,33 +685,20 @@ export class SessionService {
 
       switch (seg.state) {
         case DetectionType.GOOD_POSTURE:
-          totals.goodPostureSec += seg.durationSec;
-          slot.goodPostureSec += seg.durationSec;
-          break;
+          totals.goodPostureSec += seg.durationSec; slot.goodPostureSec += seg.durationSec; break;
         case DetectionType.TURTLE_NECK:
-          totals.turtleNeckSec += seg.durationSec;
-          slot.turtleNeckSec += seg.durationSec;
-          break;
+          totals.turtleNeckSec += seg.durationSec; slot.turtleNeckSec += seg.durationSec; break;
         case DetectionType.ROUND_SHOULDER:
-          totals.roundShoulderSec += seg.durationSec;
-          slot.roundShoulderSec += seg.durationSec;
-          break;
+          totals.roundShoulderSec += seg.durationSec; slot.roundShoulderSec += seg.durationSec; break;
         case DetectionType.SHOULDER_ASYMMETRY:
-          totals.shoulderAsymmetrySec += seg.durationSec;
-          slot.shoulderAsymmetrySec += seg.durationSec;
-          break;
+          totals.shoulderAsymmetrySec += seg.durationSec; slot.shoulderAsymmetrySec += seg.durationSec; break;
         case DetectionType.DARK_ENV:
-          totals.darkEnvSec += seg.durationSec;
-          slot.darkEnvSec += seg.durationSec;
-          break;
+          totals.darkEnvSec += seg.durationSec; slot.darkEnvSec += seg.durationSec; break;
         case DetectionType.UNCLASSIFIED:
-          totals.unclassifiedSec += seg.durationSec;
-          slot.unclassifiedSec += seg.durationSec;
-          break;
+          totals.unclassifiedSec += seg.durationSec; slot.unclassifiedSec += seg.durationSec; break;
       }
     }
 
-    const goodPostureCount = countByState[DetectionType.GOOD_POSTURE] ?? 0;
     const turtleNeckCount = countByState[DetectionType.TURTLE_NECK] ?? 0;
     const roundShoulderCount = countByState[DetectionType.ROUND_SHOULDER] ?? 0;
     const shoulderAsymmetryCount = countByState[DetectionType.SHOULDER_ASYMMETRY] ?? 0;
@@ -582,28 +711,16 @@ export class SessionService {
       this.prisma.dailyStat.upsert({
         where: { userId_date: { userId, date } },
         create: {
-          userId,
-          date,
-          ...totals,
-          goodPostureCount,
-          turtleNeckCount,
-          roundShoulderCount,
-          shoulderAsymmetryCount,
-          darkEnvCount,
-          warningCount,
-          healthScore,
-          postureScore,
+          userId, date, ...totals,
+          goodPostureCount: countByState[DetectionType.GOOD_POSTURE] ?? 0,
+          turtleNeckCount, roundShoulderCount, shoulderAsymmetryCount, darkEnvCount,
+          warningCount, healthScore, postureScore,
         },
         update: {
           ...totals,
-          goodPostureCount,
-          turtleNeckCount,
-          roundShoulderCount,
-          shoulderAsymmetryCount,
-          darkEnvCount,
-          warningCount,
-          healthScore,
-          postureScore,
+          goodPostureCount: countByState[DetectionType.GOOD_POSTURE] ?? 0,
+          turtleNeckCount, roundShoulderCount, shoulderAsymmetryCount, darkEnvCount,
+          warningCount, healthScore, postureScore,
         },
       }),
       ...slots.map((slot, slotIndex) =>
