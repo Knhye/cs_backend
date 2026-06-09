@@ -8,6 +8,7 @@ export class WeeklyBreakdownDto {
   @ApiProperty({ description: 'badPostureSec 대비 비율 (0.0~1.0)' }) roundShoulderRatio!: number;
   @ApiProperty() shoulderAsymmetrySec!: number;
   @ApiProperty({ description: 'badPostureSec 대비 비율 (0.0~1.0)' }) shoulderAsymmetryRatio!: number;
+  @ApiProperty({ description: '동시 감지 중복 시간 (초): sum(all types) - totalDetectionSec, 0 이상' }) overlapSec!: number;
 }
 
 export class WeeklyDailyStatDto {
@@ -26,8 +27,10 @@ export class WeeklyDashboardDto {
   @ApiProperty({ description: '정자세 시간 (초)' }) goodPostureSec!: number;
   @ApiProperty({ description: '자세 경고 시간 (초) = turtleNeck + roundShoulder + shoulderAsymmetry' }) badPostureSec!: number;
   @ApiProperty({ description: '어둠 감지 시간 (초)' }) darkEnvSec!: number;
+  @ApiProperty({ description: '미분류 시간 (초): totalDetectionSec - good - warning - dark, 중복 없을 때만 양수' }) unclassifiedSec!: number;
   @ApiProperty({ description: '위험도 퍼센트 (0~100 정수)' }) riskPercent!: number;
   @ApiProperty({ description: '정자세 비율 (0.0~1.0)' }) goodPostureRatio!: number;
+  @ApiProperty({ description: '자세 경고 비율 (0.0~1.0)' }) warningRatio!: number;
   @ApiProperty({ enum: WEEKDAY_VALUES, nullable: true, example: 'TUE' }) worstWeekday!: Weekday | null;
   @ApiProperty({ type: WeeklyBreakdownDto }) breakdown!: WeeklyBreakdownDto;
   @ApiProperty({ type: [WeeklyDailyStatDto] }) dailyStats!: WeeklyDailyStatDto[];
