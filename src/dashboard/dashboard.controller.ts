@@ -8,7 +8,7 @@ import {
 } from '../common/decorators/current-user.decorator.js';
 import { DashboardService } from './dashboard.service.js';
 import { WeeklyQueryDto, DailyQueryDto } from './dto/dashboard-query.dto.js';
-import { CurrentSlotDto } from './dto/current-slot-response.dto.js';
+import { DailyDashboardDto } from './dto/daily-response.dto.js';
 import {
   CreateTimelineEntryDto,
   CreateTimelineEntryResponseDto,
@@ -27,13 +27,10 @@ export class DashboardController {
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: '오늘의 건강 점수 (FR-04-01)',
-    description:
-      'Asia/Seoul 기준 오늘의 자세 점수, 경고 횟수, 어제/지난주 대비 변화율을 반환합니다.',
+    description: 'Asia/Seoul 기준 오늘의 자세 점수, 경고 횟수, 어제/지난주 대비 변화율을 반환합니다.',
   })
   @ApiCommonResponse({ type: TodayHealthScoreDto })
-  async getToday(
-    @CurrentUser() user: CurrentUserPayload,
-  ): Promise<TodayHealthScoreDto> {
+  async getToday(@CurrentUser() user: CurrentUserPayload): Promise<TodayHealthScoreDto> {
     return this.dashboardService.getTodayHealthScore(user.id);
   }
 
@@ -41,9 +38,10 @@ export class DashboardController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: '주간 스크린타임 (FR-04-02)',
+    summary: '주간 대시보드 (FR-04-02)',
     description:
-      'from(월요일)부터 일요일까지 7일치 daily_stats + 주중 worstWeekday/worstHour 반환.',
+      'from(월요일)부터 일요일까지 7일치 일별 통계를 반환합니다.\n\n' +
+      '각 일자별 goodPostureRatio, badPostureRatio가 포함됩니다.',
   })
   @ApiCommonResponse({ type: WeeklyDashboardDto })
   async getWeekly(
@@ -57,17 +55,18 @@ export class DashboardController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: '일간 스크린타임 (FR-04-03)',
+    summary: '일간 슬롯별 감지 통계 (FR-04-03)',
     description:
-      '요청 시각(Asia/Seoul)이 속한 3시간 슬롯의 자세 감지 건수를 반환합니다.\n\n' +
-      '슬롯 경계(0, 3, 6, 9, 12, 15, 18, 21시)를 지나면 건수가 초기화됩니다.\n\n' +
-      '응답값은 daily_slot_stats 테이블에 저장되어 추후 일간 스크린타임 상세 보기에서 활용됩니다.',
+      '3시간 단위 8개 슬롯(0~7)의 감지 시간(초) 통계를 반환합니다.\n\n' +
+      'date 생략 시 오늘(KST) 기준으로 조회합니다.\n\n' +
+      'totalDetectionSec = good + turtleNeck + roundShoulder + shoulderAsymmetry + darkEnv + unclassified 를 보장합니다.',
   })
-  @ApiCommonResponse({ type: CurrentSlotDto })
+  @ApiCommonResponse({ type: DailyDashboardDto })
   async getDaily(
     @CurrentUser() user: CurrentUserPayload,
-  ): Promise<CurrentSlotDto> {
-    return this.dashboardService.getCurrentSlotStats(user.id);
+    @Query() query: DailyQueryDto,
+  ): Promise<DailyDashboardDto> {
+    return this.dashboardService.getDailySlots(user.id, query.date);
   }
 
   @Post('timeline')
@@ -97,6 +96,6 @@ export class DashboardController {
     @CurrentUser() user: CurrentUserPayload,
     @Query() query: DailyQueryDto,
   ): Promise<TimelineDashboardDto> {
-    return this.dashboardService.getTimeline(user.id, query.date);
+    return this.dashboardService.getTimeline(user.id, query.date!);
   }
 }
