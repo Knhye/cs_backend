@@ -18,6 +18,7 @@ enum DetectionType {
   SHOULDER_ASYMMETRY
   DARK_ENV
   GOOD_POSTURE
+  UNCLASSIFIED
 }
 
 enum BadgeCategory {
@@ -47,16 +48,17 @@ model User {
   providerId String?  @map("provider_id")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  refreshTokens     RefreshToken[]
-  userSettings      UserSettings?
-  detectionSessions DetectionSession[]
-  detectionEvents   DetectionEvent[]
-  dailyStats        DailyStat[]
-  dailySlotStats    DailySlotStat[]
-  userBadges        UserBadge[]
-  weeklyReports     WeeklyReport[]
-  timelineEntries   TimelineEntry[]
-  pushTokens        PushToken[]
+  refreshTokens      RefreshToken[]
+  userSettings       UserSettings?
+  detectionSessions  DetectionSession[]
+  detectionEvents    DetectionEvent[]
+  detectionSegments  DetectionSegment[]
+  dailyStats         DailyStat[]
+  dailySlotStats     DailySlotStat[]
+  userBadges         UserBadge[]
+  weeklyReports      WeeklyReport[]
+  timelineEntries    TimelineEntry[]
+  pushTokens         PushToken[]
 
   @@unique([provider, providerId])
   @@map("users")
@@ -108,11 +110,31 @@ model DetectionSession {
   healthScore        Int?      @map("health_score")
   createdAt          DateTime  @default(now()) @map("created_at")
 
-  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events DetectionEvent[]
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events   DetectionEvent[]
+  segments DetectionSegment[]
 
   @@index([userId, startedAt])
   @@map("detection_sessions")
+}
+
+model DetectionSegment {
+  id            String        @id @default(uuid())
+  sessionId     String        @map("session_id")
+  userId        String        @map("user_id")
+  state         DetectionType
+  startedAt     DateTime      @map("started_at")
+  endedAt       DateTime      @map("ended_at")
+  durationSec   Int           @map("duration_sec")
+  clientEventId String?       @unique @map("client_event_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  session DetectionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, startedAt])
+  @@index([userId, startedAt])
+  @@map("detection_segments")
 }
 
 model DetectionEvent {
@@ -142,6 +164,7 @@ model DailyStat {
   roundShoulderSec       Int      @default(0) @map("round_shoulder_sec")
   shoulderAsymmetrySec   Int      @default(0) @map("shoulder_asymmetry_sec")
   darkEnvSec             Int      @default(0) @map("dark_env_sec")
+  unclassifiedSec        Int      @default(0) @map("unclassified_sec")
   goodPostureCount       Int      @default(0) @map("good_posture_count")
   turtleNeckCount        Int      @default(0) @map("turtle_neck_count")
   roundShoulderCount     Int      @default(0) @map("round_shoulder_count")
@@ -216,6 +239,13 @@ model DailySlotStat {
   roundShoulderCount     Int      @default(0) @map("round_shoulder_count")
   shoulderAsymmetryCount Int      @default(0) @map("shoulder_asymmetry_count")
   darkEnvCount           Int      @default(0) @map("dark_env_count")
+  totalDetectionSec      Int      @default(0) @map("total_detection_sec")
+  goodPostureSec         Int      @default(0) @map("good_posture_sec")
+  turtleNeckSec          Int      @default(0) @map("turtle_neck_sec")
+  roundShoulderSec       Int      @default(0) @map("round_shoulder_sec")
+  shoulderAsymmetrySec   Int      @default(0) @map("shoulder_asymmetry_sec")
+  darkEnvSec             Int      @default(0) @map("dark_env_sec")
+  unclassifiedSec        Int      @default(0) @map("unclassified_sec")
   updatedAt              DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

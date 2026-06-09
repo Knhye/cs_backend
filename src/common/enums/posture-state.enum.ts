@@ -4,6 +4,7 @@ export const POSTURE_STATES = [
   'SHOULDER_ASYMMETRY',
   'DARK_ENV',
   'GOOD_POSTURE',
+  'UNCLASSIFIED',
 ] as const;
 
 export type PostureState = (typeof POSTURE_STATES)[number];
