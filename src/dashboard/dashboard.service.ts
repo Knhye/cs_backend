@@ -16,8 +16,9 @@ import {
 import { TodayHealthScoreDto } from './dto/today-response.dto.js';
 import { WEEKDAY_VALUES, Weekday } from '../common/enums/weekday.enum.js';
 import {
+  WeeklyBreakdownDto,
+  WeeklyDailyStatDto,
   WeeklyDashboardDto,
-  WeeklyDayDto,
 } from './dto/weekly-response.dto.js';
 import {
   addDays,
@@ -79,24 +80,26 @@ export class DashboardService {
       });
       const byDate = new Map(stats.map((s) => [formatDate(s.date), s]));
 
-      const days: WeeklyDayDto[] = [];
       let turtleNeckTotalSec = 0;
       let roundShoulderTotalSec = 0;
       let shoulderAsymmetryTotalSec = 0;
       let darkEnvTotalSec = 0;
       let weeklyGoodPostureSec = 0;
       let weeklyTotalDetectionSec = 0;
+      let worstWeekday: Weekday | null = null;
+      let worstScore = Number.POSITIVE_INFINITY;
+
+      const dailyStats: WeeklyDailyStatDto[] = [];
 
       for (let i = 0; i < 7; i++) {
         const d = addDays(from, i);
         const key = formatDate(d);
         const s = byDate.get(key);
+        const weekday = WEEKDAY_VALUES[d.getUTCDay()];
 
         const totalSec = s?.totalDetectionSec ?? 0;
         const goodSec = s?.goodPostureSec ?? 0;
-        const badPostureRatio = totalSec > 0
-          ? Math.round(((totalSec - goodSec) / totalSec) * 100)
-          : 0;
+        const hasData = s !== undefined;
 
         turtleNeckTotalSec += s?.turtleNeckSec ?? 0;
         roundShoulderTotalSec += s?.roundShoulderSec ?? 0;
@@ -105,35 +108,50 @@ export class DashboardService {
         weeklyGoodPostureSec += goodSec;
         weeklyTotalDetectionSec += totalSec;
 
-        days.push({ date: key, badPostureRatio });
-      }
+        const badPostureRatio = hasData
+          ? totalSec > 0
+            ? Math.round(((totalSec - goodSec) / totalSec) * 100) / 100
+            : 0
+          : null;
 
-      const goodPostureRatio = weeklyTotalDetectionSec > 0
-        ? Math.round((weeklyGoodPostureSec / weeklyTotalDetectionSec) * 100)
-        : 0;
+        dailyStats.push({ date: key, weekday, totalDetectionSec: totalSec, badPostureRatio, hasData });
 
-      let worstWeekday: Weekday | null = null;
-      let worstScore = Number.POSITIVE_INFINITY;
-      for (let i = 0; i < 7; i++) {
-        const key = formatDate(addDays(from, i));
-        const score = byDate.get(key)?.healthScore ?? null;
-        if (score == null) continue;
-        if (score < worstScore) {
+        const score = s?.healthScore ?? null;
+        if (score !== null && score < worstScore) {
           worstScore = score;
-          worstWeekday = WEEKDAY_VALUES[addDays(from, i).getUTCDay()];
+          worstWeekday = weekday;
         }
       }
 
+      const badPostureSec = turtleNeckTotalSec + roundShoulderTotalSec + shoulderAsymmetryTotalSec;
+      const goodPostureRatio = weeklyTotalDetectionSec > 0
+        ? Math.round((weeklyGoodPostureSec / weeklyTotalDetectionSec) * 100) / 100
+        : 0;
+      const riskPercent = weeklyTotalDetectionSec > 0
+        ? Math.round((badPostureSec / weeklyTotalDetectionSec) * 100)
+        : 0;
+
+      const breakdown: WeeklyBreakdownDto = {
+        turtleNeckSec: turtleNeckTotalSec,
+        turtleNeckRatio: badPostureSec > 0 ? Math.round((turtleNeckTotalSec / badPostureSec) * 100) / 100 : 0,
+        roundShoulderSec: roundShoulderTotalSec,
+        roundShoulderRatio: badPostureSec > 0 ? Math.round((roundShoulderTotalSec / badPostureSec) * 100) / 100 : 0,
+        shoulderAsymmetrySec: shoulderAsymmetryTotalSec,
+        shoulderAsymmetryRatio: badPostureSec > 0 ? Math.round((shoulderAsymmetryTotalSec / badPostureSec) * 100) / 100 : 0,
+      };
+
       return {
-        from: fromStr,
-        to: formatDate(to),
-        days,
-        turtleNeckTotalSec,
-        roundShoulderTotalSec,
-        shoulderAsymmetryTotalSec,
-        darkEnvTotalSec,
+        weekStartDate: fromStr,
+        weekEndDate: formatDate(to),
+        totalDetectionSec: weeklyTotalDetectionSec,
+        goodPostureSec: weeklyGoodPostureSec,
+        badPostureSec,
+        darkEnvSec: darkEnvTotalSec,
+        riskPercent,
         goodPostureRatio,
         worstWeekday,
+        breakdown,
+        dailyStats,
       };
     } catch (e) {
       rethrowAsInternal(e, '서버 오류: 주간 대시보드를 조회할 수 없습니다.');
