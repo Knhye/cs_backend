@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { DetectionType, Prisma } from '@prisma/client';
 import { BadgeService } from '../badge/badge.service.js';
+import { FcmService } from '../fcm/fcm.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EndSessionDto } from './dto/end-session.dto.js';
 import {
@@ -44,6 +45,7 @@ export class SessionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly badgeService: BadgeService,
+    private readonly fcmService: FcmService,
   ) {}
 
   async start(
@@ -156,6 +158,18 @@ export class SessionService {
       await this.recomputeDailyScores(userId, seoulDate);
 
       const newBadges = await this.badgeService.evaluateNewBadges(userId);
+
+      if (newBadges.length > 0) {
+        const body =
+          newBadges.length === 1
+            ? `"${newBadges[0].name}" 배지를 획득했어요!`
+            : `배지 ${newBadges.length}개를 획득했어요!`;
+        void this.fcmService.sendToUser(userId, {
+          title: '새 배지 획득!',
+          body,
+          data: { type: 'BADGE' },
+        });
+      }
 
       return {
         sessionId,
