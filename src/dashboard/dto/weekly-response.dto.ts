@@ -1,17 +1,20 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { WEEKDAY_VALUES, Weekday } from '../../common/enums/weekday.enum.js';
 
 export class WeeklyDailyStatDto {
   @ApiProperty({ example: '2026-06-09' }) date!: string;
+  @ApiProperty({ enum: WEEKDAY_VALUES, example: 'MON' }) weekday!: Weekday;
   @ApiProperty() hasData!: boolean;
   @ApiProperty() totalDetectionSec!: number;
   @ApiProperty() goodPostureSec!: number;
+  @ApiProperty({ description: 'turtleNeck + roundShoulder + shoulderAsymmetry' }) badPostureSec!: number;
   @ApiProperty() turtleNeckSec!: number;
   @ApiProperty() roundShoulderSec!: number;
   @ApiProperty() shoulderAsymmetrySec!: number;
   @ApiProperty() darkEnvSec!: number;
   @ApiProperty() unclassifiedSec!: number;
-  @ApiProperty({ description: '정자세 비율 (0.0~1.0)' }) goodPostureRatio!: number;
-  @ApiProperty({ description: '불량 자세 비율 (0.0~1.0), badPostureSec = turtle+round+asymmetry' }) badPostureRatio!: number;
+  @ApiProperty({ type: Number, description: '정자세 비율 (0.0~1.0)' }) goodPostureRatio!: number;
+  @ApiProperty({ type: Number, description: '불량 자세 비율 (0.0~1.0)' }) badPostureRatio!: number;
 }
 
 export class WeeklyDashboardDto {

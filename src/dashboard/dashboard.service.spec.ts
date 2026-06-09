@@ -152,6 +152,44 @@ describe('DashboardService.getWeekly', () => {
     });
   });
 
+  describe('weekday / badPostureSec 필드', () => {
+    it('weekday는 WEEKDAY_VALUES 기반 요일 문자열 반환', async () => {
+      findMany.mockResolvedValue([]);
+
+      const result = await service.getWeekly('user1', MONDAY);
+      // 2025-06-02 is MON, +1=TUE, ..., +6=SUN
+      expect(result.dailyStats[0].weekday).toBe('MON');
+      expect(result.dailyStats[1].weekday).toBe('TUE');
+      expect(result.dailyStats[5].weekday).toBe('SAT');
+      expect(result.dailyStats[6].weekday).toBe('SUN');
+    });
+
+    it('badPostureSec = turtleNeck + roundShoulder + shoulderAsymmetry', async () => {
+      findMany.mockResolvedValue([
+        makeDay(MONDAY, {
+          totalDetectionSec: 3600,
+          turtleNeckSec: 600,
+          roundShoulderSec: 500,
+          shoulderAsymmetrySec: 400,
+        }),
+      ]);
+
+      const result = await service.getWeekly('user1', MONDAY);
+      const mon = result.dailyStats.find((d) => d.date === MONDAY)!;
+
+      expect(mon.badPostureSec).toBe(1500);
+    });
+
+    it('데이터 없는 날 badPostureSec=0', async () => {
+      findMany.mockResolvedValue([]);
+
+      const result = await service.getWeekly('user1', MONDAY);
+      result.dailyStats.forEach((d) => {
+        expect(d.badPostureSec).toBe(0);
+      });
+    });
+  });
+
   describe('날짜 범위 검증', () => {
     it('월요일이 아닌 from → BadRequestException', async () => {
       await expect(service.getWeekly('user1', '2025-06-03')).rejects.toThrow('월요일');

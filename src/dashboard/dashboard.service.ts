@@ -23,6 +23,7 @@ import {
   parseDate,
   todaySeoulDate,
 } from '../common/utils/date.util.js';
+import { WEEKDAY_VALUES } from '../common/enums/weekday.enum.js';
 import { rethrowAsInternal } from '../common/utils/error.util.js';
 
 @Injectable()
@@ -140,9 +141,11 @@ export class DashboardService {
 
         dailyStats.push({
           date: key,
+          weekday: WEEKDAY_VALUES[d.getUTCDay()],
           hasData,
           totalDetectionSec: totalSec,
           goodPostureSec: goodSec,
+          badPostureSec,
           turtleNeckSec,
           roundShoulderSec,
           shoulderAsymmetrySec,
