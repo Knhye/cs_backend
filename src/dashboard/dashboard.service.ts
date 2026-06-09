@@ -124,8 +124,15 @@ export class DashboardService {
       }
 
       const badPostureSec = turtleNeckTotalSec + roundShoulderTotalSec + shoulderAsymmetryTotalSec;
+      const sumAllSec = weeklyGoodPostureSec + badPostureSec + darkEnvTotalSec;
+      const overlapSec = Math.max(0, sumAllSec - weeklyTotalDetectionSec);
+      const unclassifiedSec = Math.max(0, weeklyTotalDetectionSec - sumAllSec);
+
       const goodPostureRatio = weeklyTotalDetectionSec > 0
         ? Math.round((weeklyGoodPostureSec / weeklyTotalDetectionSec) * 100) / 100
+        : 0;
+      const warningRatio = weeklyTotalDetectionSec > 0
+        ? Math.round((badPostureSec / weeklyTotalDetectionSec) * 100) / 100
         : 0;
       const riskPercent = weeklyTotalDetectionSec > 0
         ? Math.round((badPostureSec / weeklyTotalDetectionSec) * 100)
@@ -138,6 +145,7 @@ export class DashboardService {
         roundShoulderRatio: badPostureSec > 0 ? Math.round((roundShoulderTotalSec / badPostureSec) * 100) / 100 : 0,
         shoulderAsymmetrySec: shoulderAsymmetryTotalSec,
         shoulderAsymmetryRatio: badPostureSec > 0 ? Math.round((shoulderAsymmetryTotalSec / badPostureSec) * 100) / 100 : 0,
+        overlapSec,
       };
 
       return {
@@ -147,8 +155,10 @@ export class DashboardService {
         goodPostureSec: weeklyGoodPostureSec,
         badPostureSec,
         darkEnvSec: darkEnvTotalSec,
+        unclassifiedSec,
         riskPercent,
         goodPostureRatio,
+        warningRatio,
         worstWeekday,
         breakdown,
         dailyStats,
