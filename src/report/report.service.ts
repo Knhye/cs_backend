@@ -326,18 +326,15 @@ export class ReportService {
       .map(([key, b]) => {
         const [date, hourStr, minStr] = key.split('|');
         const total = b.good + b.turtleNeck + b.shoulder + b.dark;
-        const entries: Array<[string, number]> = [
-          ['GOOD', b.good],
-          ['TURTLE_NECK', b.turtleNeck],
-          ['SHOULDER_ISSUE', b.shoulder],
-          ['DARK_ENV', b.dark],
-        ];
         const dominantState =
           total > 0
-            ? entries.reduce((acc, cur) =>
-                cur[1] > acc[1] ? cur : acc,
-              entries[0],
-              )[0]
+            ? (b.good >= b.turtleNeck && b.good >= b.shoulder && b.good >= b.dark
+                ? 'GOOD'
+                : b.turtleNeck >= b.shoulder && b.turtleNeck >= b.dark
+                  ? 'TURTLE_NECK'
+                  : b.shoulder >= b.dark
+                    ? 'SHOULDER_ISSUE'
+                    : 'DARK_ENV')
             : null;
         const healthScore =
           total > 0
