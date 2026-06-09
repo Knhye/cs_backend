@@ -12,6 +12,7 @@ function makeDay(
     roundShoulderSec: number;
     shoulderAsymmetrySec: number;
     darkEnvSec: number;
+    unclassifiedSec: number;
     healthScore: number | null;
     postureScore: number | null;
   }> = {},
@@ -26,6 +27,7 @@ function makeDay(
     roundShoulderSec: 0,
     shoulderAsymmetrySec: 0,
     darkEnvSec: 0,
+    unclassifiedSec: 0,
     goodPostureCount: 0,
     turtleNeckCount: 0,
     roundShoulderCount: 0,
@@ -50,8 +52,8 @@ describe('DashboardService.getWeekly', () => {
     service = new DashboardService(mockPrisma);
   });
 
-  describe('집계 검증 필드', () => {
-    it('total = good + warning + dark + unclassified 합계 오차 1초 이내', async () => {
+  describe('합계 보장', () => {
+    it('totalDetectionSec = good + turtle + round + asymmetry + dark + unclassified (per day)', async () => {
       findMany.mockResolvedValue([
         makeDay(MONDAY, {
           totalDetectionSec: 200,
@@ -60,120 +62,72 @@ describe('DashboardService.getWeekly', () => {
           roundShoulderSec: 20,
           shoulderAsymmetrySec: 10,
           darkEnvSec: 10,
+          unclassifiedSec: 40,
         }),
       ]);
 
       const result = await service.getWeekly('user1', MONDAY);
+      const mon = result.dailyStats.find((d) => d.date === MONDAY)!;
 
-      const { totalDetectionSec, goodPostureSec, badPostureSec, darkEnvSec, unclassifiedSec } = result;
-      const reconstructed = goodPostureSec + badPostureSec + darkEnvSec + unclassifiedSec;
-      expect(Math.abs(totalDetectionSec - reconstructed)).toBeLessThanOrEqual(1);
-      expect(totalDetectionSec).toBe(200);
-      expect(goodPostureSec).toBe(80);
-      expect(badPostureSec).toBe(70); // 40+20+10
-      expect(darkEnvSec).toBe(10);
-      expect(unclassifiedSec).toBe(40); // 200 - 80 - 70 - 10
-    });
-
-    it('7일 합산도 합계 등식 만족', async () => {
-      findMany.mockResolvedValue([
-        makeDay(MONDAY, { totalDetectionSec: 100, goodPostureSec: 40, turtleNeckSec: 30, darkEnvSec: 10 }),
-        makeDay('2025-06-03', { totalDetectionSec: 80, goodPostureSec: 60, roundShoulderSec: 10 }),
-      ]);
-
-      const result = await service.getWeekly('user1', MONDAY);
-
-      const { totalDetectionSec, goodPostureSec, badPostureSec, darkEnvSec, unclassifiedSec } = result;
-      const reconstructed = goodPostureSec + badPostureSec + darkEnvSec + unclassifiedSec;
-      expect(Math.abs(totalDetectionSec - reconstructed)).toBeLessThanOrEqual(1);
-    });
-  });
-
-  describe('동시 감지 오버랩', () => {
-    it('자세 유형 합이 total 초과 시 overlapSec 반환, unclassifiedSec=0', async () => {
-      findMany.mockResolvedValue([
-        makeDay(MONDAY, {
-          totalDetectionSec: 100,
-          goodPostureSec: 0,
-          turtleNeckSec: 60,
-          roundShoulderSec: 60,
-          shoulderAsymmetrySec: 0,
-          darkEnvSec: 0,
-        }),
-      ]);
-
-      const result = await service.getWeekly('user1', MONDAY);
-
-      // warning=120 > total=100 → overlap=20
-      expect(result.breakdown.overlapSec).toBe(20);
-      expect(result.unclassifiedSec).toBe(0);
-    });
-
-    it('중복 없을 때 overlapSec=0, unclassifiedSec >= 0', async () => {
-      findMany.mockResolvedValue([
-        makeDay(MONDAY, {
-          totalDetectionSec: 300,
-          goodPostureSec: 100,
-          turtleNeckSec: 50,
-          roundShoulderSec: 30,
-          shoulderAsymmetrySec: 20,
-          darkEnvSec: 50,
-        }),
-      ]);
-
-      const result = await service.getWeekly('user1', MONDAY);
-
-      expect(result.breakdown.overlapSec).toBe(0);
-      expect(result.unclassifiedSec).toBe(50); // 300 - 100 - 100 - 50
+      const reconstructed =
+        mon.goodPostureSec +
+        mon.turtleNeckSec +
+        mon.roundShoulderSec +
+        mon.shoulderAsymmetrySec +
+        mon.darkEnvSec +
+        mon.unclassifiedSec;
+      expect(mon.totalDetectionSec).toBe(200);
+      expect(reconstructed).toBe(200);
     });
   });
 
   describe('비율 계산', () => {
-    it('goodPostureRatio = goodSec / totalSec (0.0~1.0)', async () => {
+    it('goodPostureRatio = goodSec / totalSec (소수 4자리)', async () => {
       findMany.mockResolvedValue([
-        makeDay(MONDAY, { totalDetectionSec: 200, goodPostureSec: 80 }),
+        makeDay(MONDAY, { totalDetectionSec: 200, goodPostureSec: 100 }),
       ]);
 
       const result = await service.getWeekly('user1', MONDAY);
+      const mon = result.dailyStats.find((d) => d.date === MONDAY)!;
 
-      expect(result.goodPostureRatio).toBe(0.4);
+      expect(mon.goodPostureRatio).toBe(0.5);
     });
 
-    it('warningRatio = badPostureSec / totalSec (0.0~1.0)', async () => {
+    it('badPostureRatio = (turtle+round+asymmetry) / totalSec', async () => {
       findMany.mockResolvedValue([
         makeDay(MONDAY, {
-          totalDetectionSec: 200,
-          goodPostureSec: 80,
-          turtleNeckSec: 40,
-          roundShoulderSec: 20,
-          shoulderAsymmetrySec: 10,
+          totalDetectionSec: 3600,
+          goodPostureSec: 1800,
+          turtleNeckSec: 600,
+          roundShoulderSec: 600,
+          shoulderAsymmetrySec: 300,
+          darkEnvSec: 60,
+          unclassifiedSec: 240,
         }),
       ]);
 
       const result = await service.getWeekly('user1', MONDAY);
+      const mon = result.dailyStats.find((d) => d.date === MONDAY)!;
 
-      // badPostureSec=70, total=200 → 0.35
-      expect(result.warningRatio).toBe(0.35);
+      // badPostureSec = 600+600+300 = 1500, ratio = 1500/3600 ≈ 0.4167
+      expect(mon.badPostureRatio).toBeCloseTo(0.4167, 3);
     });
 
-    it('riskPercent는 warningRatio의 정수 퍼센트', async () => {
+    it('totalDetectionSec=0이면 goodPostureRatio=0, badPostureRatio=0', async () => {
       findMany.mockResolvedValue([
-        makeDay(MONDAY, {
-          totalDetectionSec: 200,
-          turtleNeckSec: 40,
-          roundShoulderSec: 20,
-          shoulderAsymmetrySec: 10,
-        }),
+        makeDay(MONDAY, { totalDetectionSec: 0 }),
       ]);
 
       const result = await service.getWeekly('user1', MONDAY);
+      const mon = result.dailyStats.find((d) => d.date === MONDAY)!;
 
-      expect(result.riskPercent).toBe(Math.round(result.warningRatio * 100));
+      expect(mon.goodPostureRatio).toBe(0);
+      expect(mon.badPostureRatio).toBe(0);
     });
   });
 
-  describe('요일별 경고 비율', () => {
-    it('데이터 있는 날: badPostureRatio = (total - good) / total', async () => {
+  describe('hasData 필드', () => {
+    it('데이터 있는 날: hasData=true', async () => {
       findMany.mockResolvedValue([
         makeDay(MONDAY, { totalDetectionSec: 100, goodPostureSec: 40 }),
       ]);
@@ -181,75 +135,20 @@ describe('DashboardService.getWeekly', () => {
       const result = await service.getWeekly('user1', MONDAY);
       const mon = result.dailyStats.find((d) => d.date === MONDAY)!;
 
-      expect(mon.badPostureRatio).toBe(0.6);
       expect(mon.hasData).toBe(true);
     });
 
-    it('데이터 없는 날: badPostureRatio=null, hasData=false', async () => {
-      findMany.mockResolvedValue([]); // 이번 주 데이터 없음
-
-      const result = await service.getWeekly('user1', MONDAY);
-
-      result.dailyStats.forEach((d) => {
-        expect(d.badPostureRatio).toBeNull();
-        expect(d.hasData).toBe(false);
-      });
-    });
-
-    it('totalDetectionSec=0인 날(데이터 있음): badPostureRatio=0', async () => {
-      findMany.mockResolvedValue([
-        makeDay(MONDAY, { totalDetectionSec: 0, goodPostureSec: 0 }),
-      ]);
-
-      const result = await service.getWeekly('user1', MONDAY);
-      const mon = result.dailyStats.find((d) => d.date === MONDAY)!;
-
-      expect(mon.badPostureRatio).toBe(0);
-      expect(mon.hasData).toBe(true);
-    });
-  });
-
-  describe('totalDetectionSec=0 엣지케이스', () => {
-    it('데이터 없을 때 모든 비율 0, 집계 필드도 0', async () => {
+    it('데이터 없는 날: hasData=false, 모든 sec=0, ratio=0', async () => {
       findMany.mockResolvedValue([]);
 
       const result = await service.getWeekly('user1', MONDAY);
 
-      expect(result.totalDetectionSec).toBe(0);
-      expect(result.goodPostureRatio).toBe(0);
-      expect(result.warningRatio).toBe(0);
-      expect(result.riskPercent).toBe(0);
-      expect(result.unclassifiedSec).toBe(0);
-      expect(result.breakdown.overlapSec).toBe(0);
-    });
-  });
-
-  describe('경고 유형별 비중', () => {
-    it('breakdown 비율 합 = 1 (오차 0.01 이내)', async () => {
-      findMany.mockResolvedValue([
-        makeDay(MONDAY, {
-          turtleNeckSec: 40,
-          roundShoulderSec: 20,
-          shoulderAsymmetrySec: 10,
-        }),
-      ]);
-
-      const result = await service.getWeekly('user1', MONDAY);
-      const { turtleNeckRatio, roundShoulderRatio, shoulderAsymmetryRatio } = result.breakdown;
-
-      expect(Math.abs(turtleNeckRatio + roundShoulderRatio + shoulderAsymmetryRatio - 1)).toBeLessThan(0.01);
-    });
-
-    it('badPostureSec=0이면 breakdown 비율 모두 0', async () => {
-      findMany.mockResolvedValue([
-        makeDay(MONDAY, { totalDetectionSec: 100, goodPostureSec: 100 }),
-      ]);
-
-      const result = await service.getWeekly('user1', MONDAY);
-
-      expect(result.breakdown.turtleNeckRatio).toBe(0);
-      expect(result.breakdown.roundShoulderRatio).toBe(0);
-      expect(result.breakdown.shoulderAsymmetryRatio).toBe(0);
+      result.dailyStats.forEach((d) => {
+        expect(d.hasData).toBe(false);
+        expect(d.totalDetectionSec).toBe(0);
+        expect(d.goodPostureRatio).toBe(0);
+        expect(d.badPostureRatio).toBe(0);
+      });
     });
   });
 
@@ -277,6 +176,16 @@ describe('DashboardService.getWeekly', () => {
       const result = await service.getWeekly('user1', MONDAY);
 
       expect(result.dailyStats).toHaveLength(7);
+    });
+
+    it('7일 각각 date 필드가 올바른 순서', async () => {
+      findMany.mockResolvedValue([]);
+
+      const result = await service.getWeekly('user1', MONDAY);
+      const dates = result.dailyStats.map((d) => d.date);
+
+      expect(dates[0]).toBe('2025-06-02');
+      expect(dates[6]).toBe('2025-06-08');
     });
   });
 });
