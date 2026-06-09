@@ -176,11 +176,20 @@ export class DashboardService {
         throw new BadRequestException('date는 YYYY-MM-DD 형식이어야 합니다.');
       }
 
+      if (dto.eventId) {
+        const existing = await this.prisma.timelineEntry.findFirst({
+          where: { userId, eventId: dto.eventId },
+          select: { id: true },
+        });
+        if (existing) return { accepted: 0 };
+      }
+
       await this.prisma.timelineEntry.create({
         data: {
           userId,
           date,
           time: dto.time,
+          eventId: dto.eventId ?? null,
           dominantState: dto.dominantState,
           message: dto.message ?? '',
         },
