@@ -24,6 +24,7 @@ import {
 } from './dto/session-response.dto.js';
 import { StartSessionDto } from './dto/start-session.dto.js';
 import { UploadEventsDto } from './dto/upload-events.dto.js';
+import { UploadSegmentsDto, UploadSegmentsResponseDto } from './dto/upload-segments.dto.js';
 import { SessionService } from './session.service.js';
 
 @ApiTags('Session')
@@ -60,7 +61,7 @@ export class SessionController {
   @Post(':id/events')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '감지 이벤트 배치 업로드 (최대 100건)' })
+  @ApiOperation({ summary: '감지 이벤트 배치 업로드 (최대 100건, 레거시)' })
   @ApiCommonResponse({ type: UploadEventsResponseDto })
   async uploadEvents(
     @CurrentUser() user: CurrentUserPayload,
@@ -68,6 +69,24 @@ export class SessionController {
     @Body() dto: UploadEventsDto,
   ): Promise<UploadEventsResponseDto> {
     return this.sessionService.uploadEvents(user.id, id, dto);
+  }
+
+  @Post(':id/segments')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '감지 구간 배치 업로드 (최대 200건)',
+    description:
+      '구간 단위로 감지 상태를 저장합니다. durationSec는 서버가 startedAt/endedAt으로 계산합니다.\n\n' +
+      'KST 날짜 경계에서 자동 분리되며, clientEventId로 중복을 차단합니다.',
+  })
+  @ApiCommonResponse({ type: UploadSegmentsResponseDto, status: 201 })
+  async uploadSegments(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UploadSegmentsDto,
+  ): Promise<UploadSegmentsResponseDto> {
+    return this.sessionService.uploadSegments(user.id, id, dto);
   }
 
   @Get('current')

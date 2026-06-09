@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Matches } from 'class-validator';
+import { IsOptional, Matches } from 'class-validator';
 
 export class WeeklyQueryDto {
   @ApiProperty({
@@ -13,10 +13,12 @@ export class WeeklyQueryDto {
 
 export class DailyQueryDto {
   @ApiProperty({
-    description: '조회 일자(YYYY-MM-DD, Asia/Seoul)',
-    example: '2026-04-11',
+    description: '조회 일자(YYYY-MM-DD, Asia/Seoul). 생략 시 오늘(KST).',
+    example: '2026-06-09',
     pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+    required: false,
   })
+  @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date는 YYYY-MM-DD 형식이어야 합니다.' })
-  date!: string;
+  date?: string;
 }
