@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SessionStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
 enum ReportPushWay {
   NOTION
   EMAIL
@@ -94,28 +100,46 @@ model UserSettings {
 }
 
 model DetectionSession {
-  id                 String    @id @default(uuid())
-  userId             String    @map("user_id")
-  startedAt          DateTime  @map("started_at")
-  endedAt            DateTime? @map("ended_at")
-  totalDurationSec   Int       @default(0) @map("total_duration_sec")
-  goodPostureSec     Int       @default(0) @map("good_posture_sec")
-  turtleNeckSec      Int       @default(0) @map("turtle_neck_sec")
-  shoulderIssueSec   Int       @default(0) @map("shoulder_issue_sec")
-  darkEnvSec         Int       @default(0) @map("dark_env_sec")
-  goodPostureCount   Int       @default(0) @map("good_posture_count")
-  turtleNeckCount    Int       @default(0) @map("turtle_neck_count")
-  shoulderIssueCount Int       @default(0) @map("shoulder_issue_count")
-  darkEnvCount       Int       @default(0) @map("dark_env_count")
-  healthScore        Int?      @map("health_score")
-  createdAt          DateTime  @default(now()) @map("created_at")
+  id                 String        @id @default(uuid())
+  userId             String        @map("user_id")
+  status             SessionStatus @default(ACTIVE)
+  startedAt          DateTime      @map("started_at")
+  endedAt            DateTime?     @map("ended_at")
+  pausedAt           DateTime?     @map("paused_at")
+  totalPausedSec     Int           @default(0) @map("total_paused_sec")
+  totalDurationSec   Int           @default(0) @map("total_duration_sec")
+  goodPostureSec     Int           @default(0) @map("good_posture_sec")
+  turtleNeckSec      Int           @default(0) @map("turtle_neck_sec")
+  shoulderIssueSec   Int           @default(0) @map("shoulder_issue_sec")
+  darkEnvSec         Int           @default(0) @map("dark_env_sec")
+  goodPostureCount   Int           @default(0) @map("good_posture_count")
+  turtleNeckCount    Int           @default(0) @map("turtle_neck_count")
+  shoulderIssueCount Int           @default(0) @map("shoulder_issue_count")
+  darkEnvCount       Int           @default(0) @map("dark_env_count")
+  healthScore        Int?          @map("health_score")
+  createdAt          DateTime      @default(now()) @map("created_at")
 
-  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events   DetectionEvent[]
-  segments DetectionSegment[]
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events       DetectionEvent[]
+  segments     DetectionSegment[]
+  sessionPauses SessionPause[]
 
   @@index([userId, startedAt])
   @@map("detection_sessions")
+}
+
+model SessionPause {
+  id          String    @id @default(uuid())
+  sessionId   String    @map("session_id")
+  pausedAt    DateTime  @map("paused_at")
+  resumedAt   DateTime? @map("resumed_at")
+  durationSec Int?      @map("duration_sec")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  session DetectionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("session_pauses")
 }
 
 model DetectionSegment {
