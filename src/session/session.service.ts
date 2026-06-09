@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { DetectionType, Prisma, SessionStatus } from '@prisma/client';
+import { DetectionType, Prisma, SessionSource, SessionStatus } from '@prisma/client';
 import { BadgeService } from '../badge/badge.service.js';
 import { FcmService } from '../fcm/fcm.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -86,9 +86,9 @@ export class SessionService {
         throw new ConflictException('이미 진행 중인 세션이 존재합니다.');
       }
       const session = await this.prisma.detectionSession.create({
-        data: { userId, startedAt: new Date(dto.startedAt) },
+        data: { userId, startedAt: new Date(dto.startedAt), source: dto.source ?? SessionSource.WEB },
       });
-      return { sessionId: session.id, startedAt: session.startedAt };
+      return { sessionId: session.id, startedAt: session.startedAt, source: session.source };
     } catch (e) {
       rethrowAsInternal(e, '서버 오류: 세션을 시작할 수 없습니다.');
     }
@@ -391,6 +391,9 @@ export class SessionService {
       if (session.status === SessionStatus.PAUSED) {
         throw new ConflictException('일시정지된 세션에는 구간을 추가할 수 없습니다.');
       }
+      if (dto.source && session.source !== dto.source) {
+        throw new ConflictException('요청 source가 세션 source와 일치하지 않습니다.');
+      }
 
       const incoming = dto.segments.map(s => {
         const startedAt = new Date(s.startedAt);
@@ -489,6 +492,9 @@ export class SessionService {
       if (session.status === SessionStatus.PAUSED) {
         throw new ConflictException('일시정지된 세션에는 이벤트를 추가할 수 없습니다.');
       }
+      if (dto.source && session.source !== dto.source) {
+        throw new ConflictException('요청 source가 세션 source와 일치하지 않습니다.');
+      }
       const data: Prisma.DetectionEventCreateManyInput[] = dto.events.map(e => ({
         sessionId,
         userId,
@@ -515,6 +521,7 @@ export class SessionService {
         sessionId: session.id,
         startedAt: session.startedAt,
         status: session.status === SessionStatus.PAUSED ? 'PAUSED' : 'ACTIVE',
+        source: session.source,
         pausedAt: session.pausedAt,
         totalPausedSec: session.totalPausedSec,
       };

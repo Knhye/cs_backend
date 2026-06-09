@@ -23,6 +23,7 @@ import {
   parseDate,
   todaySeoulDate,
 } from '../common/utils/date.util.js';
+import { WEEKDAY_VALUES } from '../common/enums/weekday.enum.js';
 import { rethrowAsInternal } from '../common/utils/error.util.js';
 
 @Injectable()
@@ -140,9 +141,11 @@ export class DashboardService {
 
         dailyStats.push({
           date: key,
+          weekday: WEEKDAY_VALUES[d.getUTCDay()],
           hasData,
           totalDetectionSec: totalSec,
           goodPostureSec: goodSec,
+          badPostureSec,
           turtleNeckSec,
           roundShoulderSec,
           shoulderAsymmetrySec,
@@ -173,11 +176,20 @@ export class DashboardService {
         throw new BadRequestException('date는 YYYY-MM-DD 형식이어야 합니다.');
       }
 
+      if (dto.eventId) {
+        const existing = await this.prisma.timelineEntry.findFirst({
+          where: { userId, eventId: dto.eventId },
+          select: { id: true },
+        });
+        if (existing) return { accepted: 0 };
+      }
+
       await this.prisma.timelineEntry.create({
         data: {
           userId,
           date,
           time: dto.time,
+          eventId: dto.eventId ?? null,
           dominantState: dto.dominantState,
           message: dto.message ?? '',
         },

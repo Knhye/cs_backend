@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { DetectionType } from '@prisma/client';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { DetectionType, SessionSource } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -8,6 +8,7 @@ import {
   IsEnum,
   IsISO8601,
   IsInt,
+  IsOptional,
   Max,
   Min,
   ValidateNested,
@@ -50,4 +51,13 @@ export class UploadEventsDto {
   @ValidateNested({ each: true })
   @Type(() => DetectionEventDto)
   events!: DetectionEventDto[];
+
+  @ApiPropertyOptional({
+    enum: SessionSource,
+    description: '요청 주체 source. 세션 source와 불일치 시 409.',
+    example: 'WEB',
+  })
+  @IsOptional()
+  @IsEnum(SessionSource, { message: 'source는 WEB 또는 EXTENSION이어야 합니다.' })
+  source?: SessionSource;
 }

@@ -13,6 +13,11 @@ enum SessionStatus {
   ENDED
 }
 
+enum SessionSource {
+  WEB
+  EXTENSION
+}
+
 enum ReportPushWay {
   NOTION
   EMAIL
@@ -103,6 +108,7 @@ model DetectionSession {
   id                 String        @id @default(uuid())
   userId             String        @map("user_id")
   status             SessionStatus @default(ACTIVE)
+  source             SessionSource @default(WEB)
   startedAt          DateTime      @map("started_at")
   endedAt            DateTime?     @map("ended_at")
   pausedAt           DateTime?     @map("paused_at")
@@ -283,13 +289,15 @@ model TimelineEntry {
   id            String   @id @default(uuid())
   userId        String   @map("user_id")
   date          DateTime @db.Date
-  time          String   @db.VarChar(5)
+  time          String   @db.VarChar(8)
+  eventId       String?  @map("event_id")
   dominantState String   @map("dominant_state")
   message       String   @default("")
   createdAt     DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, eventId])
   @@index([userId, date])
   @@map("timeline_entries")
 }
