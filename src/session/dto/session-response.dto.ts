@@ -6,6 +6,9 @@ export class SessionStartResponseDto {
 
   @ApiProperty({ description: '시작 시각', example: '2026-04-11T09:00:00.000Z' })
   startedAt!: Date;
+
+  @ApiProperty({ enum: ['WEB', 'EXTENSION'], description: '세션 생성 source' })
+  source!: 'WEB' | 'EXTENSION';
 }
 
 export class CurrentSessionResponseDto {
@@ -17,6 +20,9 @@ export class CurrentSessionResponseDto {
 
   @ApiProperty({ enum: ['ACTIVE', 'PAUSED'], description: '세션 상태' })
   status!: 'ACTIVE' | 'PAUSED';
+
+  @ApiProperty({ enum: ['WEB', 'EXTENSION'], description: '세션 생성 source' })
+  source!: 'WEB' | 'EXTENSION';
 
   @ApiProperty({ description: '일시정지 시각 (PAUSED 상태일 때만 값 있음)', nullable: true })
   pausedAt!: Date | null;

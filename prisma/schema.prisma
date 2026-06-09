@@ -13,6 +13,11 @@ enum SessionStatus {
   ENDED
 }
 
+enum SessionSource {
+  WEB
+  EXTENSION
+}
+
 enum ReportPushWay {
   NOTION
   EMAIL
@@ -103,6 +108,7 @@ model DetectionSession {
   id                 String        @id @default(uuid())
   userId             String        @map("user_id")
   status             SessionStatus @default(ACTIVE)
+  source             SessionSource @default(WEB)
   startedAt          DateTime      @map("started_at")
   endedAt            DateTime?     @map("ended_at")
   pausedAt           DateTime?     @map("paused_at")
