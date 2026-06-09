@@ -1,47 +1,34 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { WEEKDAY_VALUES, Weekday } from '../../common/enums/weekday.enum.js';
 
-export class WeeklyDayDto {
-  @ApiProperty({ description: '일자(YYYY-MM-DD)', example: '2026-04-06' })
-  date!: string;
+export class WeeklyBreakdownDto {
+  @ApiProperty() turtleNeckSec!: number;
+  @ApiProperty({ description: 'badPostureSec 대비 비율 (0.0~1.0)' }) turtleNeckRatio!: number;
+  @ApiProperty() roundShoulderSec!: number;
+  @ApiProperty({ description: 'badPostureSec 대비 비율 (0.0~1.0)' }) roundShoulderRatio!: number;
+  @ApiProperty() shoulderAsymmetrySec!: number;
+  @ApiProperty({ description: 'badPostureSec 대비 비율 (0.0~1.0)' }) shoulderAsymmetryRatio!: number;
+}
 
-  @ApiProperty({ description: '해당 일 총 시간 대비 비정자세 유지 시간 백분율 (0~100)' })
-  badPostureRatio!: number;
+export class WeeklyDailyStatDto {
+  @ApiProperty({ example: '2025-06-02' }) date!: string;
+  @ApiProperty({ enum: WEEKDAY_VALUES, example: 'MON' }) weekday!: Weekday;
+  @ApiProperty() totalDetectionSec!: number;
+  @ApiProperty({ nullable: true, description: '자세 경고 비율 (0.0~1.0), 데이터 없으면 null' })
+  badPostureRatio!: number | null;
+  @ApiProperty() hasData!: boolean;
 }
 
 export class WeeklyDashboardDto {
-  @ApiProperty({ description: '주 시작일(월요일)', example: '2026-04-06' })
-  from!: string;
-
-  @ApiProperty({ description: '주 종료일(일요일)', example: '2026-04-12' })
-  to!: string;
-
-  @ApiProperty({
-    description: '월~일 7일치 집계 (해당 일자 기록이 없으면 0/null)',
-    type: [WeeklyDayDto],
-  })
-  days!: WeeklyDayDto[];
-
-  @ApiProperty({ description: '주간 거북목 누적 시간(초)' })
-  turtleNeckTotalSec!: number;
-
-  @ApiProperty({ description: '주간 라운드 숄더 누적 시간(초)' })
-  roundShoulderTotalSec!: number;
-
-  @ApiProperty({ description: '주간 자세 비대칭 누적 시간(초)' })
-  shoulderAsymmetryTotalSec!: number;
-
-  @ApiProperty({ description: '주간 어둠 환경 누적 시간(초)' })
-  darkEnvTotalSec!: number;
-
-  @ApiProperty({ description: '주 총 시간 대비 정자세 유지 시간 백분율 (0~100)' })
-  goodPostureRatio!: number;
-
-  @ApiProperty({
-    description: '주중 건강 점수가 가장 낮은 요일. 모든 일자 점수가 null이면 null',
-    enum: WEEKDAY_VALUES,
-    nullable: true,
-    example: 'WED',
-  })
-  worstWeekday!: Weekday | null;
+  @ApiProperty({ description: '주 시작일 (월요일)', example: '2025-06-02' }) weekStartDate!: string;
+  @ApiProperty({ description: '주 종료일 (일요일)', example: '2025-06-08' }) weekEndDate!: string;
+  @ApiProperty({ description: '총 감지 시간 (초)' }) totalDetectionSec!: number;
+  @ApiProperty({ description: '정자세 시간 (초)' }) goodPostureSec!: number;
+  @ApiProperty({ description: '자세 경고 시간 (초) = turtleNeck + roundShoulder + shoulderAsymmetry' }) badPostureSec!: number;
+  @ApiProperty({ description: '어둠 감지 시간 (초)' }) darkEnvSec!: number;
+  @ApiProperty({ description: '위험도 퍼센트 (0~100 정수)' }) riskPercent!: number;
+  @ApiProperty({ description: '정자세 비율 (0.0~1.0)' }) goodPostureRatio!: number;
+  @ApiProperty({ enum: WEEKDAY_VALUES, nullable: true, example: 'TUE' }) worstWeekday!: Weekday | null;
+  @ApiProperty({ type: WeeklyBreakdownDto }) breakdown!: WeeklyBreakdownDto;
+  @ApiProperty({ type: [WeeklyDailyStatDto] }) dailyStats!: WeeklyDailyStatDto[];
 }
